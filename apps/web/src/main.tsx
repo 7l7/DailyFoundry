@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { Analytics } from "@vercel/analytics/react";
+import { track } from "@vercel/analytics";
 import { dailySeed, selectDaily, utcDayKey } from "@dailyfoundry/core";
 import questions from "../../../games/internet-timeline/questions.json";
 import "./styles.css";
@@ -82,6 +84,23 @@ function bestStreak(history: History) {
   return best;
 }
 
+function daysSinceLastPlay(history: History, today: string) {
+  const previousDays = Object.keys(history).filter((day) => day < today).sort();
+  const latest = previousDays.at(-1);
+  if (!latest) return null;
+  return Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${latest}T00:00:00Z`)) / DAY_MS);
+}
+
+function captureOnce(key: string, event: string, properties?: Record<string, string | number | boolean>) {
+  try {
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    // Ignore storage restrictions; analytics should never block gameplay.
+  }
+  track(event, properties);
+}
+
 function formatCountdown(milliseconds: number) {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -128,6 +147,7 @@ function InternetTimeline() {
   const [played, setPlayed] = useState<PlayedRound[]>(savedToday?.rounds ?? []);
   const [shareState, setShareState] = useState<"idle" | "copied" | "shared">("idle");
   const [countdown, setCountdown] = useState(msUntilNextUtcDay());
+  const startedAt = useRef(Date.now());
 
   const complete = roundIndex >= challengeCards.length;
   const current = complete ? null : challengeCards[roundIndex];
@@ -135,13 +155,49 @@ function InternetTimeline() {
   const currentCorrect = selectedSlot === correctIndex;
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("ref") === "share") {
+      captureOnce(`df:referral:${day}`, "referral_open", {
+        game: GAME_ID,
+        puzzle: puzzleNumber(day),
+      });
+    }
+
+    if (!savedToday) {
+      captureOnce(`df:start:${day}`, "game_start", {
+        game: GAME_ID,
+        puzzle: puzzleNumber(day),
+      });
+
+      const gap = daysSinceLastPlay(history, day);
+      if (gap !== null) {
+        captureOnce(`df:return:${day}`, "daily_return", {
+          game: GAME_ID,
+          days_since_last_play: gap,
+          completed_days: Object.keys(history).length,
+          d1: gap === 1,
+          d7: gap <= 7,
+        });
+      }
+    }
+  }, [day, history, savedToday]);
+
+  useEffect(() => {
     if (!complete || played.length !== challengeCards.length || history[day]) return;
+    const score = played.filter((round) => round.correct).length;
     const nextHistory = {
       ...history,
       [day]: { day, rounds: played, completedAt: new Date().toISOString() },
     };
     localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
     setHistory(nextHistory);
+    track("game_complete", {
+      game: GAME_ID,
+      puzzle: puzzleNumber(day),
+      score,
+      perfect: score === GUESSES,
+      duration_seconds: Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)),
+    });
   }, [challengeCards.length, complete, day, history, played]);
 
   useEffect(() => {
@@ -167,6 +223,13 @@ function InternetTimeline() {
       next.splice(correctIndex, 0, current);
       return next;
     });
+    track("round_complete", {
+      game: GAME_ID,
+      puzzle: puzzleNumber(day),
+      round: roundIndex + 1,
+      correct: currentCorrect,
+      timeline_size: timeline.length,
+    });
     setRevealed(true);
   }
 
@@ -177,12 +240,21 @@ function InternetTimeline() {
   }
 
   async function shareResult() {
-    const url = window.location.origin;
-    const text = shareText(day, played, streak, url);
+    const shareUrl = `${window.location.origin}/?ref=share`;
+    const text = shareText(day, played, streak, shareUrl);
+    const score = played.filter((round) => round.correct).length;
+
+    track("share_click", {
+      game: GAME_ID,
+      puzzle: puzzleNumber(day),
+      score,
+      streak,
+    });
 
     if (navigator.share) {
       try {
-        await navigator.share({ title: `Internet Timeline #${puzzleNumber(day)}`, text, url });
+        await navigator.share({ title: `Internet Timeline #${puzzleNumber(day)}`, text, url: shareUrl });
+        track("share_success", { game: GAME_ID, method: "native", score });
         setShareState("shared");
         return;
       } catch (error) {
@@ -192,8 +264,10 @@ function InternetTimeline() {
 
     try {
       await navigator.clipboard.writeText(text);
+      track("share_success", { game: GAME_ID, method: "clipboard", score });
       setShareState("copied");
     } catch {
+      track("share_success", { game: GAME_ID, method: "prompt", score });
       window.prompt("Copy your challenge:", text);
     }
   }
@@ -333,5 +407,8 @@ function InternetTimeline() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode><InternetTimeline /></React.StrictMode>,
+  <React.StrictMode>
+    <InternetTimeline />
+    <Analytics />
+  </React.StrictMode>,
 );
