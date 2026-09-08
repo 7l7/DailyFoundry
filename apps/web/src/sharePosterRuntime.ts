@@ -1,1 +1,1 @@
-export const SHARE_POSTER_TEMPLATE = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABcQERQRDhcUEhQaGBcbIjklIh8fIkYyNSk5UkhXVVFIUE5bZoNvW2F8Yk5QcptzfIeLk1xtepiutbu4uf/Z...TRUNCATED_PLACEHOLDER...";
+export const SHARE_POSTER_TEMPLATE = "/share-poster-template.jpg";
