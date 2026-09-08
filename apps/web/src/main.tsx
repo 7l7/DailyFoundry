@@ -33,6 +33,19 @@ function puzzleNumber(day: string) {
   return Math.max(1, Math.floor((dayStart - LAUNCH_DAY) / DAY_MS) + 1);
 }
 
+function dailyDeck(day: string) {
+  const dayIndex = puzzleNumber(day) - 1;
+  const daysPerCycle = Math.max(1, Math.floor(questions.length / CARDS_NEEDED));
+  const cycle = Math.floor(dayIndex / daysPerCycle);
+  const slot = dayIndex % daysPerCycle;
+  const shuffled = selectDaily(
+    questions,
+    questions.length,
+    dailySeed(`${GAME_ID}:cycle:${cycle}`, "deck"),
+  );
+  return shuffled.slice(slot * CARDS_NEEDED, slot * CARDS_NEEDED + CARDS_NEEDED);
+}
+
 function readHistory(): History {
   try {
     return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "{}") as History;
@@ -100,10 +113,7 @@ function correctInsertionIndex(timeline: Question[], card: Question) {
 
 function InternetTimeline() {
   const day = utcDayKey();
-  const deck = useMemo(
-    () => selectDaily(questions, CARDS_NEEDED, dailySeed(GAME_ID, day)),
-    [day],
-  );
+  const deck = useMemo(() => dailyDeck(day), [day]);
   const anchor = deck[0];
   const challengeCards = deck.slice(1);
 
