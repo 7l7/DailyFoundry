@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { track } from "@vercel/analytics";
 import { dailySeed, selectDaily, utcDayKey } from "@dailyfoundry/core";
 import questions from "../../../games/internet-timeline/questions.json";
+import { SHARE_POSTER_TEMPLATE } from "./sharePosterTemplate";
 import "./styles.css";
 
 type Question = (typeof questions)[number];
@@ -86,10 +87,10 @@ function msUntilNextUtcDay() {
 }
 
 function shareTone(score: number) {
-  if (score === 5) return { headline: "PERFECTLY IN SYNC.", short: "Perfect timeline.", prompt: "Can you match it?" };
-  if (score === 4) return { headline: "ONE GLITCH IN THE TIMELINE.", short: "One glitch in the timeline.", prompt: "Can you go perfect?" };
-  if (score >= 2) return { headline: "TIME GOT WEIRD.", short: "Time got weird.", prompt: "Think you know what came first?" };
-  return { headline: "TIME IS A FLAT CIRCLE.", short: "Apparently I have no sense of internet time.", prompt: "Your turn." };
+  if (score === 5) return { headline: "PERFECTLY IN SYNC.", short: "Perfect timeline.", prompt: "Can you match it?", sticker: "Internet historian unlocked." };
+  if (score === 4) return { headline: "ONE GLITCH IN THE TIMELINE.", short: "One glitch in the timeline.", prompt: "Can you go perfect?", sticker: "One wrong turn. Still dangerous." };
+  if (score >= 2) return { headline: "TIME GOT WEIRD.", short: "Time got weird.", prompt: "Think you know what came first?", sticker: "Confidence: unstable." };
+  return { headline: "TIME IS A FLAT CIRCLE.", short: "Apparently I have no sense of internet time.", prompt: "Think you can do better?", sticker: "Legendary fails still count." };
 }
 
 function shareText(day: string, rounds: PlayedRound[], streak: number, url: string) {
@@ -104,70 +105,166 @@ function isTouchShareDevice() {
   return window.matchMedia?.("(pointer: coarse)").matches || window.innerWidth <= 720;
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill();
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function drawWrappedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines = 3) {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+      if (lines.length === maxLines - 1) break;
+    } else line = test;
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  lines.forEach((value, index) => ctx.fillText(value, x, y + index * lineHeight));
 }
 
 async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: number, url: string) {
-  const width = 1080, height = 1350;
+  const width = 1080;
+  const height = 1424;
   const canvas = document.createElement("canvas");
-  canvas.width = width; canvas.height = height;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas unavailable");
 
+  const template = await loadImage(SHARE_POSTER_TEMPLATE);
+  ctx.drawImage(template, 0, 0, width, height);
+
   const score = rounds.filter((round) => round.correct).length;
   const tone = shareTone(score);
-  const number = puzzleNumber(day);
-  const ink = "#171A23", paper = "#FFFDF6", blue = "#3157FF", muted = "#85878D", line = "#D9D4C8";
+  const paper = "#f7f4eb";
+  const ink = "#101114";
+  const blue = "#3157ff";
+  const yellow = "#ffe979";
+  const pink = "#ffc0cf";
 
-  ctx.fillStyle = "#EAE6DC"; ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = paper; roundRect(ctx, 54, 54, 972, 1242, 48);
-  ctx.strokeStyle = "#D3CEC2"; ctx.lineWidth = 2; ctx.stroke();
+  // Dynamic puzzle number on the sticky note.
+  ctx.save();
+  ctx.translate(730, 74);
+  ctx.rotate(-0.09);
+  ctx.fillStyle = yellow;
+  ctx.fillRect(0, 0, 245, 154);
+  ctx.fillStyle = ink;
+  ctx.textAlign = "center";
+  ctx.font = "900 66px system-ui, sans-serif";
+  ctx.fillText(`#${puzzleNumber(day)}`, 122, 72);
+  ctx.font = "700 21px system-ui, sans-serif";
+  ctx.fillText("A SMALL GUESS.", 122, 111);
+  ctx.fillText("A BIGGER PICTURE.", 122, 137);
+  ctx.restore();
 
-  ctx.fillStyle = ink; ctx.font = "800 48px system-ui, sans-serif"; ctx.fillText("INTERNET", 118, 160);
-  ctx.fillStyle = blue; ctx.fillText("TIMELINE", 118, 212);
+  // Replace the fixed result area with real variables while preserving the torn-paper design.
+  ctx.fillStyle = paper;
+  ctx.fillRect(120, 600, 790, 285);
+  ctx.fillStyle = ink;
+  ctx.font = "800 29px system-ui, sans-serif";
+  ctx.fillText("TODAY'S RESULT", 145, 650);
+  ctx.fillStyle = blue;
+  ctx.fillRect(145, 665, 210, 7);
+  ctx.font = "900 132px system-ui, sans-serif";
+  ctx.fillText(`${score}/5`, 145, 810);
 
-  ctx.fillStyle = "#EEF0FF"; roundRect(ctx, 770, 116, 192, 72, 36);
-  ctx.fillStyle = blue; ctx.font = "750 28px system-ui, sans-serif"; ctx.fillText(`#${number}`, 826, 162);
+  ctx.fillStyle = ink;
+  ctx.font = "900 51px system-ui, sans-serif";
+  drawWrappedText(ctx, tone.headline, 505, 718, 390, 56, 3);
 
-  ctx.fillStyle = muted; ctx.font = "650 24px system-ui, sans-serif"; ctx.fillText("TODAY'S RESULT", 118, 330);
-  ctx.fillStyle = ink; ctx.font = "850 82px system-ui, sans-serif";
-  const headlineLines = tone.headline.length > 22 ? tone.headline.split(" IN THE ") : [tone.headline];
-  if (headlineLines.length === 2) {
-    ctx.fillText(headlineLines[0], 118, 430);
-    ctx.fillText("IN THE", 118, 518);
-    ctx.fillText(headlineLines[1], 118, 606);
-  } else {
-    ctx.fillText(headlineLines[0], 118, 455);
-  }
-
-  ctx.fillStyle = blue; ctx.font = "850 86px system-ui, sans-serif"; ctx.fillText(`${score}/5`, 118, 730);
-  if (streak >= 2) {
-    ctx.fillStyle = ink; ctx.font = "650 28px system-ui, sans-serif"; ctx.fillText(`${streak} DAY STREAK`, 330, 715);
-  }
-
-  const y = 858, x1 = 138, x2 = 942;
-  ctx.strokeStyle = line; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
-  ctx.fillStyle = muted; ctx.font = "650 22px system-ui, sans-serif"; ctx.fillText("PAST", 118, 920); ctx.fillText("NOW", 894, 920);
+  // Dynamic five-round result timeline.
+  const lineY = 900;
+  const startX = 165;
+  const endX = 895;
+  ctx.strokeStyle = "#aaa69d";
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(startX, lineY); ctx.lineTo(endX, lineY); ctx.stroke();
   rounds.forEach((round, index) => {
-    const x = x1 + index * ((x2 - x1) / 4);
-    ctx.fillStyle = paper; ctx.beginPath(); ctx.arc(x, y, 27, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = round.correct ? blue : ink; ctx.lineWidth = round.correct ? 12 : 5; ctx.stroke();
-    if (!round.correct) { ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill(); }
+    const x = startX + index * ((endX - startX) / 4);
+    ctx.fillStyle = round.correct ? blue : paper;
+    ctx.beginPath(); ctx.arc(x, lineY, 25, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = round.correct ? blue : "#202124";
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    if (!round.correct) {
+      ctx.fillStyle = "#202124";
+      ctx.beginPath(); ctx.arc(x, lineY, 8, 0, Math.PI * 2); ctx.fill();
+    }
   });
+  ctx.fillStyle = "#66635f";
+  ctx.font = "700 21px system-ui, sans-serif";
+  ctx.fillText("PAST", 142, 949);
+  ctx.fillText("NOW", 857, 949);
 
-  ctx.strokeStyle = line; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(118, 1002); ctx.lineTo(962, 1002); ctx.stroke();
-  ctx.fillStyle = ink; ctx.font = "800 42px system-ui, sans-serif"; ctx.fillText(tone.prompt, 118, 1084);
-  ctx.fillStyle = muted; ctx.font = "500 28px system-ui, sans-serif"; ctx.fillText("Place five moments into internet history.", 118, 1134);
-  ctx.fillStyle = blue; ctx.font = "750 28px system-ui, sans-serif";
+  // Dynamic sticker and CTA copy.
+  ctx.save();
+  ctx.translate(130, 1005);
+  ctx.rotate(-0.035);
+  ctx.fillStyle = pink;
+  ctx.beginPath(); ctx.roundRect(0, 0, 270, 92, 28); ctx.fill();
+  ctx.fillStyle = ink;
+  ctx.font = "800 21px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  drawWrappedText(ctx, tone.sticker, 135, 37, 215, 27, 2);
+  ctx.restore();
+
+  ctx.fillStyle = paper;
+  ctx.fillRect(392, 1022, 500, 160);
+  ctx.fillStyle = ink;
+  ctx.font = "900 48px system-ui, sans-serif";
+  ctx.fillText("YOUR TURN.", 418, 1080);
+  ctx.fillStyle = "#ffd94a";
+  ctx.fillRect(418, 1094, 200, 8);
+  ctx.fillStyle = ink;
+  ctx.font = "600 25px system-ui, sans-serif";
+  drawWrappedText(ctx, tone.prompt, 418, 1140, 430, 31, 2);
+
+  if (streak >= 2) {
+    ctx.fillStyle = blue;
+    ctx.font = "800 22px system-ui, sans-serif";
+    ctx.fillText(`🔥 ${streak} DAY STREAK`, 145, 990);
+  }
+
   const displayUrl = url.replace(/^https?:\/\//, "").replace(/\/?\?ref=share$/, "").replace(/\/$/, "");
-  ctx.fillText(displayUrl, 118, 1220);
+  ctx.fillStyle = ink;
+  ctx.beginPath(); ctx.roundRect(370, 1195, 505, 76, 38); ctx.fill();
+  ctx.fillStyle = "white";
+  ctx.font = "800 25px system-ui, sans-serif";
+  ctx.fillText(displayUrl, 407, 1243);
 
   return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not render share card")), "image/png", 0.95));
 }
 
 function sortChronologically(items: Question[]) { return [...items].sort((a, b) => a.answerYear - b.answerYear); }
 function correctInsertionIndex(timeline: Question[], card: Question) { return timeline.filter((item) => item.answerYear < card.answerYear).length; }
+
+function SharePoster({ day, played, streak, shareUrl }: { day: string; played: PlayedRound[]; streak: number; shareUrl: string }) {
+  const score = played.filter((round) => round.correct).length;
+  const tone = shareTone(score);
+  return (
+    <a className="template-poster" href={shareUrl} aria-label="Play today's Internet Timeline challenge">
+      <img className="template-poster-bg" src={SHARE_POSTER_TEMPLATE} alt="" />
+      <div className="template-puzzle-note"><strong>#{puzzleNumber(day)}</strong><span>A SMALL GUESS.<br />A BIGGER PICTURE.</span></div>
+      <div className="template-result-panel">
+        <div className="template-result-kicker">TODAY'S RESULT</div>
+        <div className="template-result-main"><strong>{score}/5</strong><h2>{tone.headline}</h2></div>
+        <div className="template-result-track"><div className="template-track-line" />{played.map((round, index) => <span key={round.question.id} className={round.correct ? "template-node hit" : "template-node miss"} style={{ left: `${index * 25}%` }} />)}<small className="template-past">PAST</small><small className="template-now">NOW</small></div>
+        {streak >= 2 && <div className="template-streak">🔥 {streak} DAY STREAK</div>}
+      </div>
+      <div className="template-sticker">{tone.sticker}</div>
+      <div className="template-cta"><strong>Your turn.</strong><span>{tone.prompt}</span></div>
+      <div className="template-url">{window.location.host}<span>↗</span></div>
+    </a>
+  );
+}
 
 function InternetTimeline() {
   const day = utcDayKey();
@@ -240,11 +337,15 @@ function InternetTimeline() {
 
   async function saveShareCard() {
     const shareUrl = `${window.location.origin}/?ref=share`;
+    track("share_click", { game: GAME_ID, puzzle: puzzleNumber(day), method: "save_card" });
     const blob = await createShareCardBlob(day, played, streak, shareUrl);
     const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.href = objectUrl; link.download = `internet-timeline-${puzzleNumber(day)}.png`;
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `internet-timeline-${puzzleNumber(day)}.png`;
     document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(objectUrl);
-    track("share_success", { game: GAME_ID, method: "image_download" }); setShareState("saved");
+    track("share_success", { game: GAME_ID, method: "image_download" });
+    setShareState("saved");
   }
 
   async function shareChallengeImage() {
@@ -256,7 +357,9 @@ function InternetTimeline() {
       const file = new File([blob], `internet-timeline-${puzzleNumber(day)}.png`, { type: "image/png" });
       if (touchShare && navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: `Internet Timeline #${puzzleNumber(day)}`, text: `${shareTone(score).prompt} ${shareUrl}` });
-        track("share_success", { game: GAME_ID, method: "native_image", score }); setShareState("shared"); return;
+        track("share_success", { game: GAME_ID, method: "native_image", score });
+        setShareState("shared");
+        return;
       }
       await saveShareCard();
     } catch (error) {
@@ -271,28 +374,21 @@ function InternetTimeline() {
     const gamesPlayed = Object.keys(history).length;
     const perfectGames = Object.values(history).filter((result) => result.rounds.every((round) => round.correct)).length;
     const finalTimeline = sortChronologically([anchor, ...played.map((round) => round.question)]);
+    const shareUrl = `${window.location.origin}/?ref=share`;
     return (
       <main>
         <header className="topbar"><strong>Internet Timeline</strong><span>#{puzzleNumber(day)}</span></header>
         <section className="result-card">
           <div className="result-heading"><div><p className="eyebrow">Today’s result</p><h1>{score}<small>/5</small></h1></div><p className="verdict">{tone.short}</p></div>
-
-          <div className="share-poster" aria-label="Share card preview">
-            <div className="poster-header"><div className="poster-brand"><strong>INTERNET</strong><strong>TIMELINE</strong></div><span>#{puzzleNumber(day)}</span></div>
-            <div className="poster-body"><small>TODAY'S RESULT</small><h2>{tone.headline}</h2><div className="poster-score"><strong>{score}/5</strong>{streak >= 2 && <span>{streak} DAY STREAK</span>}</div></div>
-            <div className="poster-track"><div className="poster-line" />{played.map((round, i) => <span key={round.question.id} className={round.correct ? "poster-node hit" : "poster-node miss"} style={{ left: `${i * 25}%` }} />)}<small className="past">PAST</small><small className="now">NOW</small></div>
-            <div className="poster-footer"><strong>{tone.prompt}</strong><span>Place five moments into internet history.</span></div>
-          </div>
-
+          <SharePoster day={day} played={played} streak={streak} shareUrl={shareUrl} />
+          <p className="poster-hint">Tap the card to open today’s challenge.</p>
           <div className="share-actions">
             <button className="primary" onClick={touchShare ? shareChallengeImage : copyChallenge}>{touchShare ? (shareState === "shared" ? "Shared" : "Share result") : (shareState === "copied" ? "Result copied" : "Copy result")}</button>
             <button className="secondary" onClick={saveShareCard}>{shareState === "saved" ? "Card saved" : "Save poster"}</button>
           </div>
-
           <div className="stats-grid"><div><strong>{gamesPlayed}</strong><span>Played</span></div><div><strong>{streak}</strong><span>Current streak</span></div><div><strong>{maxStreak}</strong><span>Best streak</span></div><div><strong>{perfectGames}</strong><span>Perfect days</span></div></div>
           <div className="next-drop"><span>Next timeline in</span><strong>{formatCountdown(countdown)}</strong></div>
         </section>
-
         <section className="recap-card"><div className="recap-heading"><div><p className="eyebrow">Today’s answer</p><h2>The full timeline</h2></div><span>{finalTimeline[0]?.answerYear}–{finalTimeline[finalTimeline.length - 1]?.answerYear}</span></div><div className="recap-list">{finalTimeline.map((item) => <article key={item.id} className="recap-row"><strong>{item.answerYear}</strong><div><span>{item.category}</span><p>{item.prompt}</p></div></article>)}</div></section>
       </main>
     );
