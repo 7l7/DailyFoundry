@@ -2,11 +2,11 @@
   "name": "dailyfoundry",
   "private": true,
   "version": "0.0.1",
-  "packageManager": "pnpm@11.23.0",
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "pnpm --filter @dailyfoundry/web dev",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "dev": "npm --workspace @dailyfoundry/web run dev",
+    "build": "npm --workspace @dailyfoundry/core run build && npm --workspace @dailyfoundry/mechanics run build && npm --workspace @dailyfoundry/web run build",
+    "typecheck": "npm --workspace @dailyfoundry/core run typecheck && npm --workspace @dailyfoundry/mechanics run typecheck && npm --workspace @dailyfoundry/web run typecheck"
   },
   "engines": {"node": ">=22"}
 }
