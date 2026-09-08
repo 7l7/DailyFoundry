@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { dailySeed, selectDaily, utcDayKey } from "@dailyfoundry/core";
-import { scoreTimeline } from "@dailyfoundry/mechanics";
 import questions from "../../../games/internet-timeline/questions.json";
 import "./styles.css";
 
@@ -9,8 +8,9 @@ type Question = (typeof questions)[number];
 
 type PlayedRound = {
   question: Question;
-  guess: number;
-  score: number;
+  correct: boolean;
+  chosenIndex: number;
+  correctIndex: number;
 };
 
 type SavedResult = {
@@ -22,10 +22,9 @@ type SavedResult = {
 type History = Record<string, SavedResult>;
 
 const GAME_ID = "internet-timeline";
-const MIN_YEAR = 1990;
-const MAX_YEAR = 2026;
-const ROUNDS = 5;
-const HISTORY_KEY = `dailyfoundry:${GAME_ID}:history:v1`;
+const GUESSES = 5;
+const CARDS_NEEDED = GUESSES + 1;
+const HISTORY_KEY = `dailyfoundry:${GAME_ID}:history:v2`;
 const DAY_MS = 86_400_000;
 const LAUNCH_DAY = Date.UTC(2026, 8, 8);
 
@@ -45,111 +44,114 @@ function readHistory(): History {
 function consecutiveStreak(history: History, today: string) {
   let streak = 0;
   let cursor = Date.parse(`${today}T00:00:00Z`);
-
   while (true) {
     const day = new Date(cursor).toISOString().slice(0, 10);
     if (!history[day]) break;
     streak += 1;
     cursor -= DAY_MS;
   }
-
   return streak;
 }
 
 function shareText(day: string, rounds: PlayedRound[], streak: number) {
-  const total = rounds.reduce((sum, round) => sum + round.score, 0);
-  const marks = rounds
-    .map(({ score }) => (score >= 900 ? "🟢" : score >= 700 ? "🟡" : "🔴"))
-    .join("");
-  const streakLine = streak > 1 ? `\n🔥 ${streak} day streak` : "";
-  return `Internet Timeline #${puzzleNumber(day)}\n${marks}\n${total.toLocaleString()} / ${ROUNDS * 1000}${streakLine}\nBuilt with DailyFoundry`;
+  const score = rounds.filter((round) => round.correct).length;
+  const marks = rounds.map((round) => (round.correct ? "🟩" : "⬛")).join("");
+  const streakLine = streak > 1 ? `\n🔥 ${streak}` : "";
+  return `Internet Timeline #${puzzleNumber(day)}\n${marks}\n${score}/${GUESSES}${streakLine}\nBuilt with DailyFoundry`;
+}
+
+function sortChronologically(items: Question[]) {
+  return [...items].sort((a, b) => a.answerYear - b.answerYear);
+}
+
+function correctInsertionIndex(timeline: Question[], card: Question) {
+  return timeline.filter((item) => item.answerYear < card.answerYear).length;
 }
 
 function InternetTimeline() {
   const day = utcDayKey();
-  const todaysQuestions = useMemo(
-    () => selectDaily(questions, Math.min(ROUNDS, questions.length), dailySeed(GAME_ID, day)),
+  const deck = useMemo(
+    () => selectDaily(questions, CARDS_NEEDED, dailySeed(GAME_ID, day)),
     [day],
   );
+  const anchor = deck[0];
+  const challengeCards = deck.slice(1);
 
   const [history, setHistory] = useState<History>(() => readHistory());
   const savedToday = history[day];
-  const [roundIndex, setRoundIndex] = useState(savedToday ? todaysQuestions.length : 0);
-  const [guess, setGuess] = useState(2008);
-  const [submitted, setSubmitted] = useState(false);
+  const [roundIndex, setRoundIndex] = useState(savedToday ? challengeCards.length : 0);
+  const [timeline, setTimeline] = useState<Question[]>(() =>
+    savedToday ? sortChronologically([anchor, ...savedToday.rounds.map((round) => round.question)]) : [anchor],
+  );
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [revealed, setRevealed] = useState(false);
   const [played, setPlayed] = useState<PlayedRound[]>(savedToday?.rounds ?? []);
   const [copied, setCopied] = useState(false);
 
-  const complete = roundIndex >= todaysQuestions.length;
-  const current = complete ? null : todaysQuestions[roundIndex];
-  const currentScore = current
-    ? scoreTimeline(guess, current.answerYear, {
-        minYear: MIN_YEAR,
-        maxYear: MAX_YEAR,
-        maxScore: 1000,
-      })
-    : 0;
+  const complete = roundIndex >= challengeCards.length;
+  const current = complete ? null : challengeCards[roundIndex];
+  const correctIndex = current ? correctInsertionIndex(timeline, current) : -1;
+  const currentCorrect = selectedSlot === correctIndex;
 
   useEffect(() => {
-    if (!complete || played.length !== todaysQuestions.length || history[day]) return;
-
+    if (!complete || played.length !== challengeCards.length || history[day]) return;
     const nextHistory = {
       ...history,
-      [day]: {
-        day,
-        rounds: played,
-        completedAt: new Date().toISOString(),
-      },
+      [day]: { day, rounds: played, completedAt: new Date().toISOString() },
     };
-
     localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
     setHistory(nextHistory);
-  }, [complete, day, history, played, todaysQuestions.length]);
+  }, [challengeCards.length, complete, day, history, played]);
 
   const streak = consecutiveStreak(history, day);
 
-  function submitGuess() {
-    if (!current || submitted) return;
-    setPlayed((previous) => [...previous, { question: current, guess, score: currentScore }]);
-    setSubmitted(true);
+  function lockChoice() {
+    if (!current || selectedSlot === null || revealed) return;
+    const result: PlayedRound = {
+      question: current,
+      correct: currentCorrect,
+      chosenIndex: selectedSlot,
+      correctIndex,
+    };
+    setPlayed((previous) => [...previous, result]);
+    setTimeline((previous) => {
+      const next = [...previous];
+      next.splice(correctIndex, 0, current);
+      return next;
+    });
+    setRevealed(true);
   }
 
   function nextRound() {
     setRoundIndex((value) => value + 1);
-    setGuess(2008);
-    setSubmitted(false);
+    setSelectedSlot(null);
+    setRevealed(false);
   }
 
   async function copyResult() {
-    const text = shareText(day, played, streak);
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(shareText(day, played, streak));
     setCopied(true);
   }
 
   if (complete) {
-    const total = played.reduce((sum, round) => sum + round.score, 0);
+    const score = played.filter((round) => round.correct).length;
+    const verdict = score === 5 ? "Perfect timeline." : score >= 4 ? "Internet historian." : score >= 3 ? "Pretty online." : "Time is weird.";
     return (
       <main>
         <header className="topbar">
-          <strong>DailyFoundry</strong>
-          <span>Internet Timeline #{puzzleNumber(day)}</span>
+          <strong>Internet Timeline</strong>
+          <span>#{puzzleNumber(day)}</span>
         </header>
         <section className="result-card">
-          <p className="eyebrow">Today’s result</p>
-          <h1>{total.toLocaleString()}</h1>
-          <p className="score-max">out of {ROUNDS * 1000}</p>
-          <div className="round-dots" aria-label="Round scores">
-            {played.map((round) => (
-              <span key={round.question.id} title={`${round.score} points`}>
-                {round.score >= 900 ? "🟢" : round.score >= 700 ? "🟡" : "🔴"}
-              </span>
-            ))}
+          <p className="eyebrow">Today’s score</p>
+          <h1>{score}<small>/{GUESSES}</small></h1>
+          <p className="verdict">{verdict}</p>
+          <div className="round-dots" aria-label="Round results">
+            {played.map((round) => <span key={round.question.id}>{round.correct ? "🟩" : "⬛"}</span>)}
           </div>
           {streak > 0 && <p className="streak">🔥 {streak} day streak</p>}
-          <button className="primary" onClick={copyResult}>
-            {copied ? "Copied!" : "Share result"}
-          </button>
-          <p className="quiet">Same five moments for everyone today. Come back tomorrow.</p>
+          <button className="primary" onClick={copyResult}>{copied ? "Copied!" : "Share result"}</button>
+          <p className="quiet">A new timeline drops tomorrow.</p>
         </section>
       </main>
     );
@@ -158,49 +160,63 @@ function InternetTimeline() {
   return (
     <main>
       <header className="topbar">
-        <strong>DailyFoundry</strong>
+        <strong>Internet Timeline</strong>
         <span>#{puzzleNumber(day)}</span>
       </header>
 
       <section className="game-shell">
         <div className="game-meta">
-          <span>Internet Timeline</span>
-          <span>Round {roundIndex + 1}/{todaysQuestions.length}</span>
+          <span>Place the moment</span>
+          <span>{roundIndex + 1}/{GUESSES}</span>
         </div>
 
-        <h1 className="question">{current?.prompt}</h1>
-        <p className="instruction">When did this happen?</p>
-
-        <div className="year-readout">{guess}</div>
-        <input
-          className="timeline"
-          type="range"
-          min={MIN_YEAR}
-          max={MAX_YEAR}
-          value={guess}
-          disabled={submitted}
-          onChange={(event) => setGuess(Number(event.target.value))}
-          aria-label="Guess the year"
-        />
-        <div className="timeline-labels">
-          <span>{MIN_YEAR}</span>
-          <span>{MAX_YEAR}</span>
+        <div className="challenge-card">
+          <span className="category">{current?.category}</span>
+          <h1 className="question">{current?.prompt}</h1>
+          <p className="instruction">Where does it belong in internet history?</p>
         </div>
 
-        {!submitted ? (
-          <button className="primary" onClick={submitGuess}>Lock in {guess}</button>
+        <div className="timeline-stack">
+          {timeline.map((item, index) => (
+            <React.Fragment key={item.id}>
+              <button
+                className={`slot ${selectedSlot === index ? "selected" : ""} ${revealed && correctIndex === index ? "correct-slot" : ""}`}
+                onClick={() => !revealed && setSelectedSlot(index)}
+                aria-label={`Place before ${item.prompt}`}
+              >
+                <span>{revealed && correctIndex === index ? "Correct spot" : selectedSlot === index ? "Place here" : "+"}</span>
+              </button>
+              <article className="event-card">
+                <div>
+                  <span className="event-year">{item.answerYear}</span>
+                  <span className="event-category">{item.category}</span>
+                </div>
+                <p>{item.prompt}</p>
+              </article>
+              {index === timeline.length - 1 && (
+                <button
+                  className={`slot ${selectedSlot === timeline.length ? "selected" : ""} ${revealed && correctIndex === timeline.length ? "correct-slot" : ""}`}
+                  onClick={() => !revealed && setSelectedSlot(timeline.length)}
+                  aria-label="Place after the last event"
+                >
+                  <span>{revealed && correctIndex === timeline.length ? "Correct spot" : selectedSlot === timeline.length ? "Place here" : "+"}</span>
+                </button>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {!revealed ? (
+          <button className="primary" disabled={selectedSlot === null} onClick={lockChoice}>Lock it in</button>
         ) : (
-          <div className="reveal">
-            <p>The answer was <strong>{current?.answerYear}</strong>.</p>
-            <div className="points">+{currentScore}</div>
-            <button className="primary" onClick={nextRound}>
-              {roundIndex + 1 === todaysQuestions.length ? "See result" : "Next moment"}
-            </button>
+          <div className={`reveal ${currentCorrect ? "good" : "miss"}`}>
+            <p>{currentCorrect ? "Nailed it." : `It was ${current?.answerYear}.`}</p>
+            <button className="primary" onClick={nextRound}>{roundIndex + 1 === GUESSES ? "See result" : "Next moment"}</button>
           </div>
         )}
       </section>
 
-      <footer>Open source · one engine, many daily games</footer>
+      <footer>Built with DailyFoundry</footer>
     </main>
   );
 }
