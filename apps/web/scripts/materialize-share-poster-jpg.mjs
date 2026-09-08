@@ -11,7 +11,7 @@ const EXPECTED_BYTES = 25996;
 const EXPECTED_SHA256 = "ff451506e51168cb5fa3b0a7a482d679bc189fd6dfe6877d3085e4f0b4dddd79";
 
 const names = (await readdir(chunksDir)).filter((name) => name.endsWith(".b64")).sort();
-if (names.length !== 8) throw new Error(`Expected 8 poster chunks, found ${names.length}`);
+if (names.length !== 11) throw new Error(`Expected 11 poster chunks, found ${names.length}`);
 
 const base64 = (await Promise.all(names.map((name) => readFile(resolve(chunksDir, name), "utf8")))).join("");
 const bytes = Buffer.from(base64, "base64");
