@@ -23,6 +23,8 @@ type SavedResult = {
 
 type History = Record<string, SavedResult>;
 
+type ShareState = "idle" | "copied" | "saved" | "shared";
+
 const GAME_ID = "internet-timeline";
 const GUESSES = 5;
 const CARDS_NEEDED = GUESSES + 1;
@@ -96,7 +98,7 @@ function captureOnce(key: string, event: string, properties?: Record<string, str
     if (sessionStorage.getItem(key)) return;
     sessionStorage.setItem(key, "1");
   } catch {
-    // Ignore storage restrictions; analytics should never block gameplay.
+    // Analytics must never block gameplay.
   }
   track(event, properties);
 }
@@ -116,10 +118,105 @@ function msUntilNextUtcDay() {
 
 function shareText(day: string, rounds: PlayedRound[], streak: number, url: string) {
   const score = rounds.filter((round) => round.correct).length;
-  const marks = rounds.map((round) => (round.correct ? "🟩" : "⬛")).join(" ");
+  const marks = rounds.map((round) => (round.correct ? "🟩" : "⬛")).join("");
   const streakLine = streak >= 3 ? `\n🔥 ${streak} day streak` : "";
   const challenge = score === GUESSES ? "Perfect. Can you match it?" : `I got ${score}/${GUESSES}. Can you beat me?`;
   return `⏳ Internet Timeline #${puzzleNumber(day)}\n${marks}\n${challenge}${streakLine}\n${url}`;
+}
+
+function isTouchShareDevice() {
+  return window.matchMedia?.("(pointer: coarse)").matches || window.innerWidth <= 720;
+}
+
+async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: number, url: string) {
+  const width = 1080;
+  const height = 1350;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas unavailable");
+
+  const score = rounds.filter((round) => round.correct).length;
+  const number = puzzleNumber(day);
+  const challenge = score === GUESSES ? "Can you match a perfect 5/5?" : `Can you beat ${score}/5?`;
+
+  ctx.fillStyle = "#f6f1e7";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = "#171717";
+  ctx.beginPath();
+  ctx.roundRect(70, 70, 940, 1210, 54);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 58px system-ui, sans-serif";
+  ctx.fillText("INTERNET TIMELINE", 130, 180);
+
+  ctx.fillStyle = "#9d9d9d";
+  ctx.font = "500 34px system-ui, sans-serif";
+  ctx.fillText(`DAILY CHALLENGE  ·  #${number}`, 130, 235);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "800 214px system-ui, sans-serif";
+  ctx.fillText(`${score}`, 125, 500);
+  ctx.fillStyle = "#8e8e8e";
+  ctx.font = "700 76px system-ui, sans-serif";
+  ctx.fillText("/5", 360, 500);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 54px system-ui, sans-serif";
+  ctx.fillText(challenge, 130, 615);
+
+  const boxSize = 132;
+  const gap = 28;
+  rounds.forEach((round, index) => {
+    const x = 130 + index * (boxSize + gap);
+    const y = 700;
+    ctx.fillStyle = round.correct ? "#32d74b" : "#414141";
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxSize, boxSize, 22);
+    ctx.fill();
+    if (round.correct) {
+      ctx.strokeStyle = "rgba(255,255,255,.72)";
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x + 34, y + 70);
+      ctx.lineTo(x + 57, y + 94);
+      ctx.lineTo(x + 101, y + 43);
+      ctx.stroke();
+    }
+  });
+
+  if (streak >= 2) {
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "650 40px system-ui, sans-serif";
+    ctx.fillText(`🔥 ${streak} day streak`, 130, 920);
+  }
+
+  ctx.strokeStyle = "#363636";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(130, 1010);
+  ctx.lineTo(950, 1010);
+  ctx.stroke();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 38px system-ui, sans-serif";
+  ctx.fillText("Put internet history in the right order.", 130, 1090);
+
+  ctx.fillStyle = "#9d9d9d";
+  ctx.font = "500 30px system-ui, sans-serif";
+  ctx.fillText("5 moments. One shared puzzle every day.", 130, 1145);
+
+  const displayUrl = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 32px system-ui, sans-serif";
+  ctx.fillText(displayUrl, 130, 1215);
+
+  return await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Could not render share card"))), "image/png", 0.95);
+  });
 }
 
 function sortChronologically(items: Question[]) {
@@ -145,8 +242,9 @@ function InternetTimeline() {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [played, setPlayed] = useState<PlayedRound[]>(savedToday?.rounds ?? []);
-  const [shareState, setShareState] = useState<"idle" | "copied" | "shared">("idle");
+  const [shareState, setShareState] = useState<ShareState>("idle");
   const [countdown, setCountdown] = useState(msUntilNextUtcDay());
+  const [touchShare, setTouchShare] = useState(false);
   const startedAt = useRef(Date.now());
 
   const complete = roundIndex >= challengeCards.length;
@@ -155,6 +253,7 @@ function InternetTimeline() {
   const currentCorrect = selectedSlot === correctIndex;
 
   useEffect(() => {
+    setTouchShare(isTouchShareDevice());
     const params = new URLSearchParams(window.location.search);
     if (params.get("ref") === "share") {
       captureOnce(`df:referral:${day}`, "referral_open", {
@@ -239,36 +338,59 @@ function InternetTimeline() {
     setRevealed(false);
   }
 
-  async function shareResult() {
+  async function copyChallenge() {
     const shareUrl = `${window.location.origin}/?ref=share`;
     const text = shareText(day, played, streak, shareUrl);
-    const score = played.filter((round) => round.correct).length;
-
-    track("share_click", {
-      game: GAME_ID,
-      puzzle: puzzleNumber(day),
-      score,
-      streak,
-    });
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: `Internet Timeline #${puzzleNumber(day)}`, text, url: shareUrl });
-        track("share_success", { game: GAME_ID, method: "native", score });
-        setShareState("shared");
-        return;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-      }
-    }
-
+    track("share_click", { game: GAME_ID, puzzle: puzzleNumber(day), method: "copy" });
     try {
       await navigator.clipboard.writeText(text);
-      track("share_success", { game: GAME_ID, method: "clipboard", score });
+      track("share_success", { game: GAME_ID, method: "clipboard" });
       setShareState("copied");
     } catch {
-      track("share_success", { game: GAME_ID, method: "prompt", score });
       window.prompt("Copy your challenge:", text);
+    }
+  }
+
+  async function saveShareCard() {
+    const shareUrl = `${window.location.origin}/?ref=share`;
+    const blob = await createShareCardBlob(day, played, streak, shareUrl);
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `internet-timeline-${puzzleNumber(day)}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+    track("share_success", { game: GAME_ID, method: "image_download" });
+    setShareState("saved");
+  }
+
+  async function shareChallengeImage() {
+    const shareUrl = `${window.location.origin}/?ref=share`;
+    const score = played.filter((round) => round.correct).length;
+    track("share_click", { game: GAME_ID, puzzle: puzzleNumber(day), score, method: "image" });
+
+    try {
+      const blob = await createShareCardBlob(day, played, streak, shareUrl);
+      const file = new File([blob], `internet-timeline-${puzzleNumber(day)}.png`, { type: "image/png" });
+      const canShareFile = touchShare && navigator.share && navigator.canShare?.({ files: [file] });
+
+      if (canShareFile) {
+        await navigator.share({
+          files: [file],
+          title: `Internet Timeline #${puzzleNumber(day)}`,
+          text: `Can you beat my ${score}/5? ${shareUrl}`,
+        });
+        track("share_success", { game: GAME_ID, method: "native_image", score });
+        setShareState("shared");
+        return;
+      }
+
+      await saveShareCard();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      await copyChallenge();
     }
   }
 
@@ -293,20 +415,26 @@ function InternetTimeline() {
             <p className="verdict">{verdict}</p>
           </div>
 
-          <div className="share-preview" aria-label="Share preview">
+          <div className="share-preview" aria-label="Share card preview">
             <div className="share-preview-top">
-              <span>⏳ Internet Timeline #{puzzleNumber(day)}</span>
+              <span>INTERNET TIMELINE · #{puzzleNumber(day)}</span>
               <strong>{score}/{GUESSES}</strong>
             </div>
-            <div className="round-dots">
-              {played.map((round) => <span key={round.question.id}>{round.correct ? "🟩" : "⬛"}</span>)}
+            <div className="share-result-row">
+              {played.map((round) => <span key={round.question.id} className={round.correct ? "hit" : "miss"}>{round.correct ? "✓" : ""}</span>)}
             </div>
-            <p>{score === GUESSES ? "Perfect. Can you match it?" : `Can you beat ${score}/${GUESSES}?`}</p>
+            <p>{score === GUESSES ? "Can you match a perfect 5/5?" : `Can you beat ${score}/5?`}</p>
+            <small>Put internet history in the right order.</small>
           </div>
 
-          <button className="primary share-button" onClick={shareResult}>
-            {shareState === "copied" ? "Challenge copied" : shareState === "shared" ? "Shared" : "Challenge a friend"}
-          </button>
+          <div className="share-actions">
+            <button className="primary share-button" onClick={shareChallengeImage}>
+              {shareState === "shared" ? "Shared" : shareState === "saved" ? "Card saved" : touchShare ? "Share challenge card" : "Save share card"}
+            </button>
+            <button className="secondary" onClick={copyChallenge}>
+              {shareState === "copied" ? "Challenge copied" : "Copy challenge text"}
+            </button>
+          </div>
 
           <div className="stats-grid">
             <div><strong>{gamesPlayed}</strong><span>Played</span></div>
@@ -396,6 +524,7 @@ function InternetTimeline() {
         ) : (
           <div className={`reveal ${currentCorrect ? "good" : "miss"}`}>
             <p>{currentCorrect ? "Nailed it." : `It was ${current?.answerYear}.`}</p>
+            {current?.explanation && <small>{current.explanation}</small>}
             <button className="primary" onClick={nextRound}>{roundIndex + 1 === GUESSES ? "See result" : "Next moment"}</button>
           </div>
         )}
