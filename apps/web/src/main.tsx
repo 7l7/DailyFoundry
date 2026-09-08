@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { dailySeed, selectDaily, utcDayKey } from "@dailyfoundry/core";
 import { scoreTimeline } from "@dailyfoundry/mechanics";
@@ -13,17 +13,56 @@ type PlayedRound = {
   score: number;
 };
 
+type SavedResult = {
+  day: string;
+  rounds: PlayedRound[];
+  completedAt: string;
+};
+
+type History = Record<string, SavedResult>;
+
 const GAME_ID = "internet-timeline";
 const MIN_YEAR = 1990;
 const MAX_YEAR = 2026;
 const ROUNDS = 5;
+const HISTORY_KEY = `dailyfoundry:${GAME_ID}:history:v1`;
+const DAY_MS = 86_400_000;
+const LAUNCH_DAY = Date.UTC(2026, 8, 8);
 
-function shareText(day: string, rounds: PlayedRound[]) {
+function puzzleNumber(day: string) {
+  const dayStart = Date.parse(`${day}T00:00:00Z`);
+  return Math.max(1, Math.floor((dayStart - LAUNCH_DAY) / DAY_MS) + 1);
+}
+
+function readHistory(): History {
+  try {
+    return JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "{}") as History;
+  } catch {
+    return {};
+  }
+}
+
+function consecutiveStreak(history: History, today: string) {
+  let streak = 0;
+  let cursor = Date.parse(`${today}T00:00:00Z`);
+
+  while (true) {
+    const day = new Date(cursor).toISOString().slice(0, 10);
+    if (!history[day]) break;
+    streak += 1;
+    cursor -= DAY_MS;
+  }
+
+  return streak;
+}
+
+function shareText(day: string, rounds: PlayedRound[], streak: number) {
   const total = rounds.reduce((sum, round) => sum + round.score, 0);
   const marks = rounds
     .map(({ score }) => (score >= 900 ? "🟢" : score >= 700 ? "🟡" : "🔴"))
     .join("");
-  return `Internet Timeline · ${day}\n${marks}\n${total.toLocaleString()} / ${ROUNDS * 1000}\nBuilt with DailyFoundry`;
+  const streakLine = streak > 1 ? `\n🔥 ${streak} day streak` : "";
+  return `Internet Timeline #${puzzleNumber(day)}\n${marks}\n${total.toLocaleString()} / ${ROUNDS * 1000}${streakLine}\nBuilt with DailyFoundry`;
 }
 
 function InternetTimeline() {
@@ -33,10 +72,12 @@ function InternetTimeline() {
     [day],
   );
 
-  const [roundIndex, setRoundIndex] = useState(0);
+  const [history, setHistory] = useState<History>(() => readHistory());
+  const savedToday = history[day];
+  const [roundIndex, setRoundIndex] = useState(savedToday ? todaysQuestions.length : 0);
   const [guess, setGuess] = useState(2008);
   const [submitted, setSubmitted] = useState(false);
-  const [played, setPlayed] = useState<PlayedRound[]>([]);
+  const [played, setPlayed] = useState<PlayedRound[]>(savedToday?.rounds ?? []);
   const [copied, setCopied] = useState(false);
 
   const complete = roundIndex >= todaysQuestions.length;
@@ -48,6 +89,24 @@ function InternetTimeline() {
         maxScore: 1000,
       })
     : 0;
+
+  useEffect(() => {
+    if (!complete || played.length !== todaysQuestions.length || history[day]) return;
+
+    const nextHistory = {
+      ...history,
+      [day]: {
+        day,
+        rounds: played,
+        completedAt: new Date().toISOString(),
+      },
+    };
+
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
+    setHistory(nextHistory);
+  }, [complete, day, history, played, todaysQuestions.length]);
+
+  const streak = consecutiveStreak(history, day);
 
   function submitGuess() {
     if (!current || submitted) return;
@@ -62,7 +121,7 @@ function InternetTimeline() {
   }
 
   async function copyResult() {
-    const text = shareText(day, played);
+    const text = shareText(day, played, streak);
     await navigator.clipboard.writeText(text);
     setCopied(true);
   }
@@ -73,7 +132,7 @@ function InternetTimeline() {
       <main>
         <header className="topbar">
           <strong>DailyFoundry</strong>
-          <span>Internet Timeline</span>
+          <span>Internet Timeline #{puzzleNumber(day)}</span>
         </header>
         <section className="result-card">
           <p className="eyebrow">Today’s result</p>
@@ -86,6 +145,7 @@ function InternetTimeline() {
               </span>
             ))}
           </div>
+          {streak > 0 && <p className="streak">🔥 {streak} day streak</p>}
           <button className="primary" onClick={copyResult}>
             {copied ? "Copied!" : "Share result"}
           </button>
@@ -99,7 +159,7 @@ function InternetTimeline() {
     <main>
       <header className="topbar">
         <strong>DailyFoundry</strong>
-        <span>{day}</span>
+        <span>#{puzzleNumber(day)}</span>
       </header>
 
       <section className="game-shell">
