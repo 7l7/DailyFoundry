@@ -53,11 +53,41 @@ function consecutiveStreak(history: History, today: string) {
   return streak;
 }
 
-function shareText(day: string, rounds: PlayedRound[], streak: number) {
+function bestStreak(history: History) {
+  const days = Object.keys(history).sort();
+  let best = 0;
+  let current = 0;
+  let previous = 0;
+
+  for (const day of days) {
+    const cursor = Date.parse(`${day}T00:00:00Z`);
+    current = previous && cursor - previous === DAY_MS ? current + 1 : 1;
+    best = Math.max(best, current);
+    previous = cursor;
+  }
+
+  return best;
+}
+
+function formatCountdown(milliseconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function msUntilNextUtcDay() {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1) - now.getTime();
+}
+
+function shareText(day: string, rounds: PlayedRound[], streak: number, url: string) {
   const score = rounds.filter((round) => round.correct).length;
-  const marks = rounds.map((round) => (round.correct ? "🟩" : "⬛")).join("");
-  const streakLine = streak > 1 ? `\n🔥 ${streak}` : "";
-  return `Internet Timeline #${puzzleNumber(day)}\n${marks}\n${score}/${GUESSES}${streakLine}\nBuilt with DailyFoundry`;
+  const marks = rounds.map((round) => (round.correct ? "🟩" : "⬛")).join(" ");
+  const streakLine = streak >= 3 ? `\n🔥 ${streak} day streak` : "";
+  const challenge = score === GUESSES ? "Perfect. Can you match it?" : `I got ${score}/${GUESSES}. Can you beat me?`;
+  return `⏳ Internet Timeline #${puzzleNumber(day)}\n${marks}\n${challenge}${streakLine}\n${url}`;
 }
 
 function sortChronologically(items: Question[]) {
@@ -86,7 +116,8 @@ function InternetTimeline() {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [played, setPlayed] = useState<PlayedRound[]>(savedToday?.rounds ?? []);
-  const [copied, setCopied] = useState(false);
+  const [shareState, setShareState] = useState<"idle" | "copied" | "shared">("idle");
+  const [countdown, setCountdown] = useState(msUntilNextUtcDay());
 
   const complete = roundIndex >= challengeCards.length;
   const current = complete ? null : challengeCards[roundIndex];
@@ -103,7 +134,14 @@ function InternetTimeline() {
     setHistory(nextHistory);
   }, [challengeCards.length, complete, day, history, played]);
 
+  useEffect(() => {
+    if (!complete) return;
+    const timer = window.setInterval(() => setCountdown(msUntilNextUtcDay()), 1000);
+    return () => window.clearInterval(timer);
+  }, [complete]);
+
   const streak = consecutiveStreak(history, day);
+  const maxStreak = bestStreak(history);
 
   function lockChoice() {
     if (!current || selectedSlot === null || revealed) return;
@@ -128,30 +166,93 @@ function InternetTimeline() {
     setRevealed(false);
   }
 
-  async function copyResult() {
-    await navigator.clipboard.writeText(shareText(day, played, streak));
-    setCopied(true);
+  async function shareResult() {
+    const url = window.location.origin;
+    const text = shareText(day, played, streak, url);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Internet Timeline #${puzzleNumber(day)}`, text, url });
+        setShareState("shared");
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareState("copied");
+    } catch {
+      window.prompt("Copy your challenge:", text);
+    }
   }
 
   if (complete) {
     const score = played.filter((round) => round.correct).length;
     const verdict = score === 5 ? "Perfect timeline." : score >= 4 ? "Internet historian." : score >= 3 ? "Pretty online." : "Time is weird.";
+    const gamesPlayed = Object.keys(history).length;
+    const perfectGames = Object.values(history).filter((result) => result.rounds.every((round) => round.correct)).length;
+    const finalTimeline = sortChronologically([anchor, ...played.map((round) => round.question)]);
+
     return (
       <main>
         <header className="topbar">
           <strong>Internet Timeline</strong>
           <span>#{puzzleNumber(day)}</span>
         </header>
+
         <section className="result-card">
-          <p className="eyebrow">Today’s score</p>
-          <h1>{score}<small>/{GUESSES}</small></h1>
-          <p className="verdict">{verdict}</p>
-          <div className="round-dots" aria-label="Round results">
-            {played.map((round) => <span key={round.question.id}>{round.correct ? "🟩" : "⬛"}</span>)}
+          <p className="eyebrow">Today’s timeline</p>
+          <div className="score-lockup">
+            <h1>{score}<small>/{GUESSES}</small></h1>
+            <p className="verdict">{verdict}</p>
           </div>
-          {streak > 0 && <p className="streak">🔥 {streak} day streak</p>}
-          <button className="primary" onClick={copyResult}>{copied ? "Copied!" : "Share result"}</button>
-          <p className="quiet">A new timeline drops tomorrow.</p>
+
+          <div className="share-preview" aria-label="Share preview">
+            <div className="share-preview-top">
+              <span>⏳ Internet Timeline #{puzzleNumber(day)}</span>
+              <strong>{score}/{GUESSES}</strong>
+            </div>
+            <div className="round-dots">
+              {played.map((round) => <span key={round.question.id}>{round.correct ? "🟩" : "⬛"}</span>)}
+            </div>
+            <p>{score === GUESSES ? "Perfect. Can you match it?" : `Can you beat ${score}/${GUESSES}?`}</p>
+          </div>
+
+          <button className="primary share-button" onClick={shareResult}>
+            {shareState === "copied" ? "Challenge copied" : shareState === "shared" ? "Shared" : "Challenge a friend"}
+          </button>
+
+          <div className="stats-grid">
+            <div><strong>{gamesPlayed}</strong><span>Played</span></div>
+            <div><strong>{streak}</strong><span>Current streak</span></div>
+            <div><strong>{maxStreak}</strong><span>Best streak</span></div>
+            <div><strong>{perfectGames}</strong><span>Perfect days</span></div>
+          </div>
+
+          <div className="next-drop">
+            <span>Next timeline in</span>
+            <strong>{formatCountdown(countdown)}</strong>
+          </div>
+        </section>
+
+        <section className="recap-card">
+          <div className="recap-heading">
+            <div>
+              <p className="eyebrow">Today’s answer</p>
+              <h2>The full timeline</h2>
+            </div>
+            <span>{finalTimeline[0]?.answerYear}–{finalTimeline[finalTimeline.length - 1]?.answerYear}</span>
+          </div>
+          <div className="recap-list">
+            {finalTimeline.map((item) => (
+              <article key={item.id} className="recap-row">
+                <strong>{item.answerYear}</strong>
+                <div><span>{item.category}</span><p>{item.prompt}</p></div>
+              </article>
+            ))}
+          </div>
         </section>
       </main>
     );
@@ -173,7 +274,7 @@ function InternetTimeline() {
         <div className="challenge-card">
           <span className="category">{current?.category}</span>
           <h1 className="question">{current?.prompt}</h1>
-          <p className="instruction">Where does it belong in internet history?</p>
+          <p className="instruction">Tap the gap where this moment belongs.</p>
         </div>
 
         <div className="timeline-stack">
