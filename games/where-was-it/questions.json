@@ -1,0 +1,4 @@
+[
+ {"id":"map-001","prompt":"Where was the first iPhone unveiled?","answer":{"lat":37.7838,"lng":-122.4014}},
+ {"id":"map-002","prompt":"Where did the first modern Olympic Games take place?","answer":{"lat":37.9838,"lng":23.7275}}
+]
