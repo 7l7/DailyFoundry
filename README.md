@@ -17,8 +17,8 @@ M0 proves three things:
 ## Development
 
 ```bash
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 ## M0 success criteria
@@ -29,12 +29,16 @@ pnpm dev
 - At least one experimental game is good enough that we personally want to return the next day.
 - Static-first deployment; no database required for the basic engine.
 
+## Validation
+
+The current MVP is intentionally frozen around one question: **does Internet Timeline create repeat play and sharing?** See [`docs/MVP_VALIDATION.md`](./docs/MVP_VALIDATION.md) for the metrics and go/no-go thresholds.
+
 ## Contributing
 
 Start with [`CONTRIBUTING.md`](./CONTRIBUTING.md). New game packs and reusable mechanics are especially welcome.
 
 ## License
 
-Code: Apache-2.0.
+Code: Apache-2.0. See [`LICENSE`](./LICENSE).
 
 Game content/assets must declare their own provenance and license.
