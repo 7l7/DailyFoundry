@@ -1,6 +1,6 @@
 {
   "name":"@dailyfoundry/web","version":"0.0.1","private":true,"type":"module",
-  "scripts":{"dev":"vite","build":"tsc -b && vite build","typecheck":"tsc -b --pretty false"},
+  "scripts":{"dev":"node scripts/materialize-share-poster.mjs && vite","build":"node scripts/materialize-share-poster.mjs && tsc -b && vite build","typecheck":"tsc -b --pretty false"},
   "dependencies":{"@dailyfoundry/core":"file:../../packages/core","@dailyfoundry/mechanics":"file:../../packages/mechanics","@vercel/analytics":"^1.5.0","react":"^19.1.1","react-dom":"^19.1.1"},
   "devDependencies":{"@vitejs/plugin-react":"^5.0.2","vite":"^7.1.4","typescript":"^5.9.2","@types/react":"^19.1.10","@types/react-dom":"^19.1.7"}
 }
