@@ -1,0 +1,4 @@
+{
+  "schemaVersion":"0.1","id":"where-was-it","name":"Where Was It?","description":"Pin where famous moments happened.","author":"DailyFoundry","contentLicense":"CC-BY-4.0","mechanic":"map","roundsPerGame":5,
+  "mechanicConfig":{"maxScore":1000,"zeroScoreDistanceKm":5000}
+}

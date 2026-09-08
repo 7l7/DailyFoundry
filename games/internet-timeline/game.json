@@ -1,0 +1,4 @@
+{
+  "schemaVersion":"0.1","id":"internet-timeline","name":"Internet Timeline","description":"How well do you remember internet history?","author":"DailyFoundry","contentLicense":"CC-BY-4.0","mechanic":"timeline","roundsPerGame":5,
+  "mechanicConfig":{"minYear":1990,"maxYear":2026,"maxScore":1000}
+}
