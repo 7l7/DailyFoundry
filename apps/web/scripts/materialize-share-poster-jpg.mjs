@@ -9,7 +9,7 @@ const chunksDir = resolve(webRoot, "poster-clean-final");
 const outputPath = resolve(webRoot, "public/share-poster-template.webp");
 const EXPECTED_BYTES = 92564;
 const EXPECTED_SHA256 = "d8e9604ca776ce965fa507ad3afaf5c433b7c80e74153fd31e219ac04934fd3a";
-const names = ["00.b64", "01.b64", "02.b64", "03a1.b64", "03a2a.b64", "03a2b.b64", "03b.b64", "04.b64", "05.b64", "06.b64"];
+const names = ["00.b64", "01.b64", "02.b64", "03a1.b64", "03a2a0.b64", "03a2a1.b64", "03a2a2.b64", "03a2a3.b64", "03a2b.b64", "03b.b64", "04.b64", "05.b64", "06.b64"];
 
 const base64 = (await Promise.all(names.map((name) => readFile(resolve(chunksDir, name), "utf8")))).join("");
 const bytes = Buffer.from(base64, "base64");
