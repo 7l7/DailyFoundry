@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
 import { track } from "@vercel/analytics";
-import { dailySeed, selectDaily, utcDayKey } from "@dailyfoundry/core";
+import { hashSeed, utcDayKey } from "@dailyfoundry/core";
 import questions from "../../../games/internet-timeline/questions.json";
 import { SHARE_POSTER_TEMPLATE } from "./sharePosterTemplate";
 import "./styles.css";
@@ -19,19 +19,63 @@ const CARDS_NEEDED = 6;
 const HISTORY_KEY = `dailyfoundry:${GAME_ID}:history:v2`;
 const DAY_MS = 86_400_000;
 const LAUNCH_DAY = Date.UTC(2026, 8, 8);
+const SCHEDULE_VERSION = "schedule-v1";
+const RECENT_DAYS_BLOCKED = 7;
 
 function puzzleNumber(day: string) {
   const dayStart = Date.parse(`${day}T00:00:00Z`);
   return Math.max(1, Math.floor((dayStart - LAUNCH_DAY) / DAY_MS) + 1);
 }
 
+function eraBucket(year: number) {
+  if (year < 1995) return 0;
+  if (year < 2005) return 1;
+  if (year < 2015) return 2;
+  return 3;
+}
+
+function candidateScore(question: Question, selected: Question[], dayIndex: number, slot: number) {
+  const seed = hashSeed(`${GAME_ID}:${SCHEDULE_VERSION}:${dayIndex}:${slot}:${question.id}`);
+  const randomTieBreak = seed / 0xffffffff;
+  const eraCount = selected.filter((item) => eraBucket(item.answerYear) === eraBucket(question.answerYear)).length;
+  const categoryCount = selected.filter((item) => item.category === question.category).length;
+  const minYearDistance = selected.length
+    ? Math.min(...selected.map((item) => Math.abs(item.answerYear - question.answerYear)))
+    : 50;
+
+  // Lower is better: strongly avoid same-category/era piles, mildly reward year spread,
+  // then use a deterministic hash so every player receives the same schedule.
+  return categoryCount * 100 + eraCount * 24 - Math.min(minYearDistance, 20) * 0.8 + randomTieBreak;
+}
+
+function buildScheduledDay(dayIndex: number, recentDays: Question[][]) {
+  const blockedIds = new Set(recentDays.flat().map((question) => question.id));
+  const available = questions.filter((question) => !blockedIds.has(question.id));
+  const pool = available.length >= CARDS_NEEDED ? available : questions;
+  const selected: Question[] = [];
+
+  for (let slot = 0; slot < CARDS_NEEDED; slot += 1) {
+    const remaining = pool.filter((question) => !selected.some((item) => item.id === question.id));
+    remaining.sort((a, b) => candidateScore(a, selected, dayIndex, slot) - candidateScore(b, selected, dayIndex, slot));
+    const next = remaining[0];
+    if (!next) throw new Error("Not enough questions to build daily timeline");
+    selected.push(next);
+  }
+  return selected;
+}
+
 function dailyDeck(day: string) {
-  const dayIndex = puzzleNumber(day) - 1;
-  const daysPerCycle = Math.max(1, Math.floor(questions.length / CARDS_NEEDED));
-  const cycle = Math.floor(dayIndex / daysPerCycle);
-  const slot = dayIndex % daysPerCycle;
-  const shuffled = selectDaily(questions, questions.length, dailySeed(`${GAME_ID}:cycle:${cycle}`, "deck"));
-  return shuffled.slice(slot * CARDS_NEEDED, slot * CARDS_NEEDED + CARDS_NEEDED);
+  const targetDayIndex = puzzleNumber(day) - 1;
+  const scheduled: Question[][] = [];
+
+  // Generate from the fixed launch epoch so the result is deterministic and independent
+  // of a visitor's local history. With the current pool, a card cannot reappear within
+  // the previous seven daily decks (48 distinct cards across any eight-day window).
+  for (let dayIndex = 0; dayIndex <= targetDayIndex; dayIndex += 1) {
+    const recent = scheduled.slice(Math.max(0, scheduled.length - RECENT_DAYS_BLOCKED));
+    scheduled.push(buildScheduledDay(dayIndex, recent));
+  }
+  return scheduled[targetDayIndex];
 }
 
 function readHistory(): History {
@@ -150,7 +194,6 @@ async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: n
   const yellow = "#ffe979";
   const pink = "#ffc0cf";
 
-  // Dynamic puzzle number on the sticky note.
   ctx.save();
   ctx.translate(730, 74);
   ctx.rotate(-0.09);
@@ -165,7 +208,6 @@ async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: n
   ctx.fillText("A BIGGER PICTURE.", 122, 137);
   ctx.restore();
 
-  // Replace the fixed result area with real variables while preserving the torn-paper design.
   ctx.fillStyle = paper;
   ctx.fillRect(120, 600, 790, 285);
   ctx.fillStyle = ink;
@@ -180,7 +222,6 @@ async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: n
   ctx.font = "900 51px system-ui, sans-serif";
   drawWrappedText(ctx, tone.headline, 505, 718, 390, 56, 3);
 
-  // Dynamic five-round result timeline.
   const lineY = 900;
   const startX = 165;
   const endX = 895;
@@ -204,7 +245,6 @@ async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: n
   ctx.fillText("PAST", 142, 949);
   ctx.fillText("NOW", 857, 949);
 
-  // Dynamic sticker and CTA copy.
   ctx.save();
   ctx.translate(130, 1005);
   ctx.rotate(-0.035);
