@@ -1,0 +1,22 @@
+{
+  "extra-1984-macintosh": {
+    "sourceLabel": "Computer History Museum",
+    "sourceUrl": "https://www.computerhistory.org/timeline/1984/",
+    "note": "Direct 1984 timeline entry for Apple launching the Macintosh."
+  },
+  "extra-1989-gameboy": {
+    "sourceLabel": "Nintendo",
+    "sourceUrl": "https://www.nintendo.co.jp/corporate/en/history/index.html",
+    "note": "Nintendo corporate history explicitly lists the 1989 Game Boy launch."
+  },
+  "extra-1991-linux": {
+    "sourceLabel": "Linux Foundation",
+    "sourceUrl": "https://www.linuxfoundation.org/blog/blog/anniversary-of-first-linux-kernel-release-a-look-at-collaborative-value",
+    "note": "Linux Foundation history covering Torvalds' 1991 announcement and first kernel release."
+  },
+  "extra-2003-skype": {
+    "sourceLabel": "The Guardian",
+    "sourceUrl": "https://www.theguardian.com/technology/2011/may/10/skype-timeline-start-up-sale",
+    "note": "Specific Skype history timeline identifying its 2003 founding and launch period."
+  }
+}
