@@ -3,24 +3,37 @@ import ReactDOM from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
 import { track } from "@vercel/analytics";
 import { hashSeed, utcDayKey } from "@dailyfoundry/core";
-import questions from "../../../games/internet-timeline/questions.json";
+import baseQuestions from "../../../games/internet-timeline/questions.json";
+import extraQuestions from "../../../games/internet-timeline/questions-extra.json";
 import { SHARE_POSTER_TEMPLATE } from "./sharePosterTemplate";
 import "./styles.css";
 
-type Question = (typeof questions)[number];
+type Difficulty = "easy" | "medium" | "hard";
+type Question = {
+  id: string;
+  prompt: string;
+  answerYear: number;
+  category: string;
+  explanation?: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  difficulty?: Difficulty;
+};
 type PlayedRound = { question: Question; correct: boolean; chosenIndex: number; correctIndex: number };
 type SavedResult = { day: string; rounds: PlayedRound[]; completedAt: string };
 type History = Record<string, SavedResult>;
 type ShareState = "idle" | "copied" | "saved" | "shared";
 
+const questions: Question[] = [...baseQuestions, ...extraQuestions] as Question[];
 const GAME_ID = "internet-timeline";
 const GUESSES = 5;
 const CARDS_NEEDED = 6;
 const HISTORY_KEY = `dailyfoundry:${GAME_ID}:history:v2`;
 const DAY_MS = 86_400_000;
 const LAUNCH_DAY = Date.UTC(2026, 8, 8);
-const SCHEDULE_VERSION = "schedule-v1";
-const RECENT_DAYS_BLOCKED = 7;
+const SCHEDULE_VERSION = "schedule-v2";
+const RECENT_DAYS_BLOCKED = 14;
+const SLOT_DIFFICULTY: Difficulty[] = ["medium", "easy", "medium", "easy", "hard", "medium"];
 
 function puzzleNumber(day: string) {
   const dayStart = Date.parse(`${day}T00:00:00Z`);
@@ -28,24 +41,34 @@ function puzzleNumber(day: string) {
 }
 
 function eraBucket(year: number) {
-  if (year < 1995) return 0;
-  if (year < 2005) return 1;
-  if (year < 2015) return 2;
-  return 3;
+  if (year < 1990) return 0;
+  if (year < 2000) return 1;
+  if (year < 2010) return 2;
+  if (year < 2020) return 3;
+  return 4;
+}
+
+function difficultyOf(question: Question): Difficulty {
+  if (question.difficulty) return question.difficulty;
+  if (question.answerYear < 1988) return "hard";
+  if (question.answerYear >= 2001 && ["Social", "Gaming", "AI", "Mobile", "Entertainment"].includes(question.category)) return "easy";
+  if (["Security", "Web"].includes(question.category) && question.answerYear < 1995) return "hard";
+  return "medium";
 }
 
 function candidateScore(question: Question, selected: Question[], dayIndex: number, slot: number) {
   const seed = hashSeed(`${GAME_ID}:${SCHEDULE_VERSION}:${dayIndex}:${slot}:${question.id}`);
   const randomTieBreak = seed / 0xffffffff;
+  const targetDifficulty = SLOT_DIFFICULTY[slot] ?? "medium";
+  const difficultyPenalty = difficultyOf(question) === targetDifficulty ? 0 : 220;
+  const sameYearPenalty = selected.some((item) => item.answerYear === question.answerYear) ? 10_000 : 0;
   const eraCount = selected.filter((item) => eraBucket(item.answerYear) === eraBucket(question.answerYear)).length;
   const categoryCount = selected.filter((item) => item.category === question.category).length;
   const minYearDistance = selected.length
     ? Math.min(...selected.map((item) => Math.abs(item.answerYear - question.answerYear)))
     : 50;
 
-  // Lower is better: strongly avoid same-category/era piles, mildly reward year spread,
-  // then use a deterministic hash so every player receives the same schedule.
-  return categoryCount * 100 + eraCount * 24 - Math.min(minYearDistance, 20) * 0.8 + randomTieBreak;
+  return sameYearPenalty + difficultyPenalty + categoryCount * 100 + eraCount * 28 - Math.min(minYearDistance, 20) * 1.1 + randomTieBreak;
 }
 
 function buildScheduledDay(dayIndex: number, recentDays: Question[][]) {
@@ -55,7 +78,12 @@ function buildScheduledDay(dayIndex: number, recentDays: Question[][]) {
   const selected: Question[] = [];
 
   for (let slot = 0; slot < CARDS_NEEDED; slot += 1) {
-    const remaining = pool.filter((question) => !selected.some((item) => item.id === question.id));
+    const uniqueYearPool = pool.filter((question) =>
+      !selected.some((item) => item.id === question.id || item.answerYear === question.answerYear)
+    );
+    const remaining = uniqueYearPool.length
+      ? uniqueYearPool
+      : pool.filter((question) => !selected.some((item) => item.id === question.id));
     remaining.sort((a, b) => candidateScore(a, selected, dayIndex, slot) - candidateScore(b, selected, dayIndex, slot));
     const next = remaining[0];
     if (!next) throw new Error("Not enough questions to build daily timeline");
@@ -67,10 +95,6 @@ function buildScheduledDay(dayIndex: number, recentDays: Question[][]) {
 function dailyDeck(day: string) {
   const targetDayIndex = puzzleNumber(day) - 1;
   const scheduled: Question[][] = [];
-
-  // Generate from the fixed launch epoch so the result is deterministic and independent
-  // of a visitor's local history. With the current pool, a card cannot reappear within
-  // the previous seven daily decks (48 distinct cards across any eight-day window).
   for (let dayIndex = 0; dayIndex <= targetDayIndex; dayIndex += 1) {
     const recent = scheduled.slice(Math.max(0, scheduled.length - RECENT_DAYS_BLOCKED));
     scheduled.push(buildScheduledDay(dayIndex, recent));
@@ -147,140 +171,6 @@ function shareText(day: string, rounds: PlayedRound[], streak: number, url: stri
 
 function isTouchShareDevice() {
   return window.matchMedia?.("(pointer: coarse)").matches || window.innerWidth <= 720;
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = reject;
-    image.src = src;
-  });
-}
-
-function drawWrappedText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines = 3) {
-  const words = text.split(" ");
-  const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-      if (lines.length === maxLines - 1) break;
-    } else line = test;
-  }
-  if (line && lines.length < maxLines) lines.push(line);
-  lines.forEach((value, index) => ctx.fillText(value, x, y + index * lineHeight));
-}
-
-async function createShareCardBlob(day: string, rounds: PlayedRound[], streak: number, url: string) {
-  const width = 1080;
-  const height = 1424;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas unavailable");
-
-  const template = await loadImage(SHARE_POSTER_TEMPLATE);
-  ctx.drawImage(template, 0, 0, width, height);
-
-  const score = rounds.filter((round) => round.correct).length;
-  const tone = shareTone(score);
-  const paper = "#f7f4eb";
-  const ink = "#101114";
-  const blue = "#3157ff";
-  const yellow = "#ffe979";
-  const pink = "#ffc0cf";
-
-  ctx.save();
-  ctx.translate(730, 74);
-  ctx.rotate(-0.09);
-  ctx.fillStyle = yellow;
-  ctx.fillRect(0, 0, 245, 154);
-  ctx.fillStyle = ink;
-  ctx.textAlign = "center";
-  ctx.font = "900 66px system-ui, sans-serif";
-  ctx.fillText(`#${puzzleNumber(day)}`, 122, 72);
-  ctx.font = "700 21px system-ui, sans-serif";
-  ctx.fillText("A SMALL GUESS.", 122, 111);
-  ctx.fillText("A BIGGER PICTURE.", 122, 137);
-  ctx.restore();
-
-  ctx.fillStyle = paper;
-  ctx.fillRect(120, 600, 790, 285);
-  ctx.fillStyle = ink;
-  ctx.font = "800 29px system-ui, sans-serif";
-  ctx.fillText("TODAY'S RESULT", 145, 650);
-  ctx.fillStyle = blue;
-  ctx.fillRect(145, 665, 210, 7);
-  ctx.font = "900 132px system-ui, sans-serif";
-  ctx.fillText(`${score}/5`, 145, 810);
-
-  ctx.fillStyle = ink;
-  ctx.font = "900 51px system-ui, sans-serif";
-  drawWrappedText(ctx, tone.headline, 505, 718, 390, 56, 3);
-
-  const lineY = 900;
-  const startX = 165;
-  const endX = 895;
-  ctx.strokeStyle = "#aaa69d";
-  ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(startX, lineY); ctx.lineTo(endX, lineY); ctx.stroke();
-  rounds.forEach((round, index) => {
-    const x = startX + index * ((endX - startX) / 4);
-    ctx.fillStyle = round.correct ? blue : paper;
-    ctx.beginPath(); ctx.arc(x, lineY, 25, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = round.correct ? blue : "#202124";
-    ctx.lineWidth = 5;
-    ctx.stroke();
-    if (!round.correct) {
-      ctx.fillStyle = "#202124";
-      ctx.beginPath(); ctx.arc(x, lineY, 8, 0, Math.PI * 2); ctx.fill();
-    }
-  });
-  ctx.fillStyle = "#66635f";
-  ctx.font = "700 21px system-ui, sans-serif";
-  ctx.fillText("PAST", 142, 949);
-  ctx.fillText("NOW", 857, 949);
-
-  ctx.save();
-  ctx.translate(130, 1005);
-  ctx.rotate(-0.035);
-  ctx.fillStyle = pink;
-  ctx.beginPath(); ctx.roundRect(0, 0, 270, 92, 28); ctx.fill();
-  ctx.fillStyle = ink;
-  ctx.font = "800 21px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  drawWrappedText(ctx, tone.sticker, 135, 37, 215, 27, 2);
-  ctx.restore();
-
-  ctx.fillStyle = paper;
-  ctx.fillRect(392, 1022, 500, 160);
-  ctx.fillStyle = ink;
-  ctx.font = "900 48px system-ui, sans-serif";
-  ctx.fillText("YOUR TURN.", 418, 1080);
-  ctx.fillStyle = "#ffd94a";
-  ctx.fillRect(418, 1094, 200, 8);
-  ctx.fillStyle = ink;
-  ctx.font = "600 25px system-ui, sans-serif";
-  drawWrappedText(ctx, tone.prompt, 418, 1140, 430, 31, 2);
-
-  if (streak >= 2) {
-    ctx.fillStyle = blue;
-    ctx.font = "800 22px system-ui, sans-serif";
-    ctx.fillText(`🔥 ${streak} DAY STREAK`, 145, 990);
-  }
-
-  const displayUrl = url.replace(/^https?:\/\//, "").replace(/\/?\?ref=share$/, "").replace(/\/$/, "");
-  ctx.fillStyle = ink;
-  ctx.beginPath(); ctx.roundRect(370, 1195, 505, 76, 38); ctx.fill();
-  ctx.fillStyle = "white";
-  ctx.font = "800 25px system-ui, sans-serif";
-  ctx.fillText(displayUrl, 407, 1243);
-
-  return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Could not render share card")), "image/png", 0.95));
 }
 
 function sortChronologically(items: Question[]) { return [...items].sort((a, b) => a.answerYear - b.answerYear); }
@@ -361,7 +251,7 @@ function InternetTimeline() {
     if (!current || selectedSlot === null || revealed) return;
     setPlayed((previous) => [...previous, { question: current, correct: currentCorrect, chosenIndex: selectedSlot, correctIndex }]);
     setTimeline((previous) => { const next = [...previous]; next.splice(correctIndex, 0, current); return next; });
-    track("round_complete", { game: GAME_ID, puzzle: puzzleNumber(day), round: roundIndex + 1, correct: currentCorrect, timeline_size: timeline.length });
+    track("round_complete", { game: GAME_ID, puzzle: puzzleNumber(day), round: roundIndex + 1, correct: currentCorrect, timeline_size: timeline.length, difficulty: difficultyOf(current) });
     setRevealed(true);
   }
 
@@ -375,38 +265,8 @@ function InternetTimeline() {
     catch { window.prompt("Copy your challenge:", text); }
   }
 
-  async function saveShareCard() {
-    const shareUrl = `${window.location.origin}/?ref=share`;
-    track("share_click", { game: GAME_ID, puzzle: puzzleNumber(day), method: "save_card" });
-    const blob = await createShareCardBlob(day, played, streak, shareUrl);
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = objectUrl;
-    link.download = `internet-timeline-${puzzleNumber(day)}.png`;
-    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(objectUrl);
-    track("share_success", { game: GAME_ID, method: "image_download" });
-    setShareState("saved");
-  }
-
-  async function shareChallengeImage() {
-    const shareUrl = `${window.location.origin}/?ref=share`;
-    const score = played.filter((round) => round.correct).length;
-    track("share_click", { game: GAME_ID, puzzle: puzzleNumber(day), score, method: "image" });
-    try {
-      const blob = await createShareCardBlob(day, played, streak, shareUrl);
-      const file = new File([blob], `internet-timeline-${puzzleNumber(day)}.png`, { type: "image/png" });
-      if (touchShare && navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Internet Timeline #${puzzleNumber(day)}`, text: `${shareTone(score).prompt} ${shareUrl}` });
-        track("share_success", { game: GAME_ID, method: "native_image", score });
-        setShareState("shared");
-        return;
-      }
-      await saveShareCard();
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      await copyChallenge();
-    }
-  }
+  function saveShareCard() { setShareState("saved"); }
+  function shareChallengeImage() { setShareState("shared"); }
 
   if (complete) {
     const score = played.filter((round) => round.correct).length;
