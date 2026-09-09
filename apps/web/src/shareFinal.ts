@@ -3,8 +3,8 @@ import { track } from "@vercel/analytics";
 type ShareData = { puzzle: string; score: number; headline: string; results: boolean[]; streak: number };
 
 const BG = "/share-poster-template.webp";
-const W = 900;
-const H = 1187;
+const W = 1215;
+const H = 1295;
 const INK = "#111214";
 const PAPER = "#f8f6ef";
 const BLUE = "#2057f5";
@@ -23,58 +23,49 @@ function headlineLines(score: number) {
   return ["TIME IS A", "FLAT CIRCLE."];
 }
 
+/** Clean artwork is the source of truth. No painted-over/erase rectangles live here. */
 function buildSvg(d: ShareData, bg = BG) {
   const lines = headlineLines(d.score);
-  const timelineY = 752;
-  const xs = [142, 296, 450, 604, 758];
+  const timelineY = 805;
+  const xs = [235, 410, 590, 770, 945];
   const nodes = d.results.slice(0, 5).map((ok, i) => {
     const x = xs[i];
     return ok
-      ? `<circle cx="${x}" cy="${timelineY}" r="22" fill="${PAPER}" stroke="${INK}" stroke-width="4"/><circle cx="${x}" cy="${timelineY}" r="13" fill="${GREEN}"/>`
-      : `<circle cx="${x}" cy="${timelineY}" r="22" fill="${RED}" stroke="${INK}" stroke-width="4"/><path d="M${x-8} ${timelineY-8}L${x+8} ${timelineY+8}M${x+8} ${timelineY-8}L${x-8} ${timelineY+8}" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`;
+      ? `<circle cx="${x}" cy="${timelineY}" r="25" fill="${PAPER}" stroke="${INK}" stroke-width="4"/><circle cx="${x}" cy="${timelineY}" r="15" fill="${GREEN}"/>`
+      : `<circle cx="${x}" cy="${timelineY}" r="25" fill="${RED}" stroke="${INK}" stroke-width="4"/><path d="M${x-9} ${timelineY-9}L${x+9} ${timelineY+9}M${x+9} ${timelineY-9}L${x-9} ${timelineY+9}" stroke="${INK}" stroke-width="6" stroke-linecap="round"/>`;
   }).join("");
-  const streak = d.streak >= 2 ? `<text x="450" y="698" text-anchor="middle" fill="${BLUE}" font-size="16" font-weight="800" font-family="Arial,sans-serif">${d.streak} DAY STREAK</text>` : "";
+  const streak = d.streak >= 2
+    ? `<text x="775" y="715" text-anchor="middle" fill="${BLUE}" font-size="18" font-weight="900" font-family="Arial,sans-serif">${d.streak} DAY STREAK</text>`
+    : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-    <defs>
-      <filter id="paperNoise" x="-5%" y="-5%" width="110%" height="110%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="7" result="noise"/>
-        <feColorMatrix in="noise" type="matrix" values="0 0 0 0 .62  0 0 0 0 .60  0 0 0 0 .55  0 0 0 .045 0" result="grain"/>
-        <feBlend in="SourceGraphic" in2="grain" mode="multiply"/>
-      </filter>
-    </defs>
     <image href="${bg}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="none"/>
 
-    <!-- erase all legacy text inside the existing sticky note, preserving its outer edge/shadow -->
-    <g transform="rotate(-5 625 128)" filter="url(#paperNoise)">
-      <rect x="528" y="79" width="196" height="116" rx="3" fill="#f7dc63"/>
-    </g>
-    <g transform="rotate(-5 625 128)">
-      <text x="625" y="151" text-anchor="middle" fill="${INK}" font-size="58" font-weight="900" font-family="Arial Black,Impact,sans-serif">${esc(d.puzzle)}</text>
-    </g>
-
-    <!-- erase legacy score/headline marks only; keep the torn-paper artwork and TODAY'S RESULT -->
-    <rect x="112" y="526" width="294" height="171" rx="8" fill="${PAPER}" filter="url(#paperNoise)"/>
-    <rect x="430" y="520" width="372" height="174" rx="8" fill="${PAPER}" filter="url(#paperNoise)"/>
-
-    <g transform="rotate(-1.2 250 620)">
-      <text x="126" y="650" fill="${BLUE}" font-size="112" font-weight="900" font-family="Arial Black,Impact,sans-serif" letter-spacing="-6">${d.score}/5</text>
-      <path d="M132 670 L368 664" stroke="${BLUE}" stroke-width="7" stroke-linecap="round"/>
+    <!-- puzzle number: written once onto the already-clean yellow note -->
+    <g transform="rotate(-8 735 145)">
+      <text x="735" y="150" text-anchor="middle" fill="${INK}" font-size="72" font-weight="900" font-family="Arial Black,Impact,sans-serif">${esc(d.puzzle)}</text>
+      <text x="735" y="190" text-anchor="middle" fill="${INK}" font-size="18" font-weight="900" font-family="Arial,sans-serif">A SMALL GUESS.</text>
+      <text x="735" y="214" text-anchor="middle" fill="${INK}" font-size="18" font-weight="900" font-family="Arial,sans-serif">A BIGGER PICTURE.</text>
     </g>
 
-    <g fill="${INK}" font-family="Arial Black,Impact,sans-serif" font-size="43" font-weight="900" letter-spacing="-1.5">
-      <text x="455" y="584">${esc(lines[0])}</text>
-      <text x="455" y="632">${esc(lines[1])}</text>
+    <!-- result: written once onto the already-clean result paper -->
+    <g transform="rotate(-1.2 335 635)">
+      <text x="175" y="655" fill="${BLUE}" font-size="142" font-weight="900" font-family="Arial Black,Impact,sans-serif" letter-spacing="-8">${d.score}/5</text>
+      <path d="M182 680 L490 671" stroke="${BLUE}" stroke-width="9" stroke-linecap="round"/>
     </g>
-    <path d="M455 657 L760 649" stroke="${YELLOW}" stroke-width="9" stroke-linecap="round"/>
+
+    <g fill="${INK}" font-family="Arial Black,Impact,sans-serif" font-size="52" font-weight="900" letter-spacing="-1.5">
+      <text x="585" y="595">${esc(lines[0])}</text>
+      <text x="585" y="654">${esc(lines[1])}</text>
+    </g>
+    <path d="M585 684 L965 674" stroke="${YELLOW}" stroke-width="11" stroke-linecap="round"/>
     ${streak}
 
-    <!-- timeline is the only static design area replaced as a whole -->
-    <rect x="92" y="700" width="716" height="120" rx="8" fill="${PAPER}" filter="url(#paperNoise)"/>
-    <line x1="142" y1="${timelineY}" x2="758" y2="${timelineY}" stroke="#aaa69d" stroke-width="3"/>
+    <!-- timeline is generated once; the clean background contains no old nodes -->
+    <line x1="235" y1="${timelineY}" x2="945" y2="${timelineY}" stroke="#aaa69d" stroke-width="3"/>
     ${nodes}
-    <text x="142" y="798" text-anchor="middle" fill="#77736d" font-size="18" font-weight="800" font-family="Arial,sans-serif">PAST</text>
-    <text x="758" y="798" text-anchor="middle" fill="#77736d" font-size="18" font-weight="800" font-family="Arial,sans-serif">NOW</text>
+    <text x="235" y="858" text-anchor="middle" fill="#77736d" font-size="20" font-weight="800" font-family="Arial,sans-serif">PAST</text>
+    <text x="945" y="858" text-anchor="middle" fill="#77736d" font-size="20" font-weight="800" font-family="Arial,sans-serif">NOW</text>
   </svg>`;
 }
 
@@ -122,7 +113,7 @@ function blobToDataUrl(blob: Blob) {
 }
 
 async function renderPng(data: ShareData) {
-  const resp = await fetch(BG, { cache: "force-cache" });
+  const resp = await fetch(BG, { cache: "no-store" });
   if (!resp.ok) throw new Error(`Poster background ${resp.status}`);
   const bg = await blobToDataUrl(await resp.blob());
   const svgBlob = new Blob([buildSvg(data, bg)], { type: "image/svg+xml;charset=utf-8" });
@@ -156,7 +147,7 @@ async function handleShareButton(event: Event) {
     const file = new File([blob], `internet-timeline-${data.puzzle.replace("#", "")}.png`, { type: "image/png" });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: `Internet Timeline ${data.puzzle}`, text: `${location.origin}/?ref=share` });
-      track("share_success", { game: "internet-timeline", method: "native_image_final" });
+      track("share_success", { game: "internet-timeline", method: "native_image_clean" });
       button.textContent = "Shared";
       return;
     }
@@ -166,7 +157,7 @@ async function handleShareButton(event: Event) {
   a.href = url;
   a.download = `internet-timeline-${data.puzzle.replace("#", "")}.png`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-  track("share_success", { game: "internet-timeline", method: "image_download_final" });
+  track("share_success", { game: "internet-timeline", method: "image_download_clean" });
   button.textContent = "Card saved";
 }
 
