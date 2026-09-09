@@ -1,1 +1,1 @@
-export { SHARE_POSTER_TEMPLATE } from "./sharePosterRuntime";
+export const SHARE_POSTER_TEMPLATE = "/share-poster-template.webp";
