@@ -1,0 +1,28 @@
+# Internet Timeline
+
+Internet Timeline is a free daily browser game about internet and digital culture history.
+
+Players place five historical events into chronological order. Topics include early networking, the World Wide Web, search, email, ecommerce, social media, mobile, gaming, streaming, cloud computing, cybersecurity, cryptocurrency and artificial intelligence.
+
+## Canonical URL
+https://daily-foundry.vercel.app/
+
+## Key pages
+- Home / daily game: https://daily-foundry.vercel.app/
+- Puzzle archive: https://daily-foundry.vercel.app/archive/
+- How to play: https://daily-foundry.vercel.app/how-to-play/
+- About and sourcing methodology: https://daily-foundry.vercel.app/about/
+- Open-source project: https://github.com/7l7/DailyFoundry
+
+## Game facts
+- Free to play in a web browser.
+- No account is required.
+- One deterministic daily puzzle is shared by all players.
+- Each puzzle contains one anchor event plus five placement rounds.
+- Past puzzles remain replayable in the archive.
+- Daily scheduling avoids recent repeats and same-year collisions and mixes eras, categories and difficulty.
+- Question records include explanations and source URLs.
+
+## Publisher
+DailyFoundry
+https://github.com/7l7/DailyFoundry
