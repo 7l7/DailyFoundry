@@ -6,7 +6,7 @@ import{hashSeed,utcDayKey}from"@dailyfoundry/core";
 import baseQuestions from"../../../games/internet-timeline/questions.json";
 import extraQuestions from"../../../games/internet-timeline/questions-extra.json";
 import funQuestions from"../../../games/internet-timeline/questions-fun.json";
-import curation from"../../../games/internet-timeline/curation.json";
+import{specialistIds,retiredIds}from"./curation";
 import{SHARE_POSTER_TEMPLATE}from"./sharePosterTemplate";
 import"./styles.css";
 import"./archive.css";
@@ -28,7 +28,6 @@ type Profile={key:ProfileKey;label:string;subtitle:string;categories?:string[];m
 const legacyQuestions:Question[]=[...baseQuestions,...extraQuestions]as Question[];
 const questions:Question[]=[...baseQuestions,...extraQuestions,...funQuestions]as Question[];
 const byId=new Map(questions.map(q=>[q.id,q]));
-const specialistIds=new Set<string>((curation.specialist??[])as string[]),retiredIds=new Set<string>((curation.retire??[])as string[]);
 const GAME_ID="internet-timeline",GUESSES=5,CARDS_NEEDED=6,DAY_MS=86_400_000;
 const HISTORY_KEY=`dailyfoundry:${GAME_ID}:history:v2`,REPLAY_KEY=`dailyfoundry:${GAME_ID}:replays:v1`;
 const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v7",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
