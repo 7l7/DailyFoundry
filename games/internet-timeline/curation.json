@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "defaultStatus": "core",
   "specialist": [
     "extra-1969-arpanet",
@@ -40,8 +40,6 @@
   ],
   "sourceRepair": [
     "fun-2009-facebook-like",
-    "fun-2011-google-plus",
-    "fun-2013-harlem-shake",
     "extra-2005-reddit",
     "extra-2010-pinterest"
   ],
