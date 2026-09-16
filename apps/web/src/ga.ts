@@ -17,9 +17,7 @@ const measurementId = viteEnv?.VITE_GA_MEASUREMENT_ID?.trim() || "G-7X3HQ2PK49";
 window.dataLayer = window.dataLayer || [];
 window.gtag = (...args: unknown[]) => { window.dataLayer.push(args); };
 window.gtag("js", new Date());
-window.gtag("config", measurementId, {
-  send_page_view: true,
-});
+window.gtag("config", measurementId, { send_page_view: true });
 
 const script = document.createElement("script");
 script.async = true;
@@ -33,23 +31,23 @@ function mirrorToGa(event: string, properties?: unknown) {
   window.gtag?.("event", payload.name, payload.data ?? {});
 }
 
-// Vercel Analytics already owns the product-event vocabulary. Bridge its `track()`
-// queue into GA4 so both systems receive the exact same events and properties.
-// Poll briefly because the Vercel analytics script may replace `window.va` after load.
 let underlyingVa: VaFn | undefined = window.va;
-let bridgeVa: VaFn;
+let bridgeVa: VaFn = () => {};
 
 function installBridge(next?: VaFn) {
   if (next && next !== bridgeVa) underlyingVa = next;
-  bridgeVa = (event: string, properties?: unknown) => {
+
+  const wrapped: VaFn = (event, properties) => {
     mirrorToGa(event, properties);
-    if (underlyingVa && underlyingVa !== bridgeVa) {
+    if (underlyingVa && underlyingVa !== wrapped) {
       underlyingVa(event, properties);
     } else {
       (window.vaq = window.vaq || []).push([event, properties]);
     }
   };
-  window.va = bridgeVa;
+
+  bridgeVa = wrapped;
+  window.va = wrapped;
 }
 
 installBridge(underlyingVa);
