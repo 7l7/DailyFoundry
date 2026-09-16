@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "defaultStatus": "core",
   "specialist": [
     "extra-1969-arpanet",
@@ -14,11 +14,13 @@
     "web-1990",
     "web-1991",
     "web-1992",
+    "extra-1985-windows",
     "extra-1990-first-web-server",
     "extra-1991-linux",
     "extra-1993-web-public-domain",
     "extra-1994-banner-ad",
     "extra-1995-java",
+    "extra-1997-google-domain",
     "extra-1997-sixdegrees",
     "extra-1998-paypal",
     "extra-1999-salesforce",
@@ -26,10 +28,16 @@
     "extra-2006-aws-s3",
     "extra-2006-spotify-founded",
     "extra-2009-bitcoin-genesis",
+    "extra-2012-oculus",
+    "extra-2018-fortnite-mobile",
     "extra-2019-stadia",
     "extra-2019-airpods-pro",
     "extra-2022-dalle2",
-    "extra-2024-sora"
+    "extra-2024-sora",
+    "fun-1989-aol",
+    "fun-2010-old-spice",
+    "fun-2011-google-plus",
+    "fun-2023-reddit-protest"
   ],
   "retire": [
     "web-1980",
@@ -38,6 +46,7 @@
     "extra-2003-skype",
     "extra-2016-messenger-bots",
     "fun-2010-double-rainbow",
+    "fun-2012-kony",
     "fun-2014-twitch-plays-pokemon",
     "fun-2015-periscope",
     "fun-2017-hq-trivia"
