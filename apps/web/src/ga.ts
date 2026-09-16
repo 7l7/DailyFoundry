@@ -1,23 +1,21 @@
 type AnalyticsValue = string | number | boolean | null;
 type VaPayload = { name?: string; data?: Record<string, AnalyticsValue> };
 type VaFn = (event: string, properties?: unknown) => void;
+type AnalyticsWindow = Window & {
+  dataLayer?: unknown[];
+  gtag?: (...args: unknown[]) => void;
+  va?: VaFn;
+  vaq?: [string, unknown?][];
+};
 
-declare global {
-  interface Window {
-    dataLayer: unknown[];
-    gtag?: (...args: unknown[]) => void;
-    va?: VaFn;
-    vaq?: [string, unknown?][];
-  }
-}
-
+const analyticsWindow = window as AnalyticsWindow;
 const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
 const measurementId = viteEnv?.VITE_GA_MEASUREMENT_ID?.trim() || "G-7X3HQ2PK49";
 
-window.dataLayer = window.dataLayer || [];
-window.gtag = (...args: unknown[]) => { window.dataLayer.push(args); };
-window.gtag("js", new Date());
-window.gtag("config", measurementId, { send_page_view: true });
+analyticsWindow.dataLayer = analyticsWindow.dataLayer || [];
+analyticsWindow.gtag = (...args: unknown[]) => { analyticsWindow.dataLayer?.push(args); };
+analyticsWindow.gtag("js", new Date());
+analyticsWindow.gtag("config", measurementId, { send_page_view: true });
 
 const script = document.createElement("script");
 script.async = true;
@@ -28,10 +26,10 @@ function mirrorToGa(event: string, properties?: unknown) {
   if (event !== "event" || !properties || typeof properties !== "object") return;
   const payload = properties as VaPayload;
   if (!payload.name) return;
-  window.gtag?.("event", payload.name, payload.data ?? {});
+  analyticsWindow.gtag?.("event", payload.name, payload.data ?? {});
 }
 
-let underlyingVa: VaFn | undefined = window.va;
+let underlyingVa: VaFn | undefined = analyticsWindow.va;
 let bridgeVa: VaFn = () => {};
 
 function installBridge(next?: VaFn) {
@@ -42,12 +40,12 @@ function installBridge(next?: VaFn) {
     if (underlyingVa && underlyingVa !== wrapped) {
       underlyingVa(event, properties);
     } else {
-      (window.vaq = window.vaq || []).push([event, properties]);
+      (analyticsWindow.vaq = analyticsWindow.vaq || []).push([event, properties]);
     }
   };
 
   bridgeVa = wrapped;
-  window.va = wrapped;
+  analyticsWindow.va = wrapped;
 }
 
 installBridge(underlyingVa);
@@ -55,7 +53,7 @@ installBridge(underlyingVa);
 let checks = 0;
 const bridgeWatcher = window.setInterval(() => {
   checks += 1;
-  if (window.va && window.va !== bridgeVa) installBridge(window.va);
+  if (analyticsWindow.va && analyticsWindow.va !== bridgeVa) installBridge(analyticsWindow.va);
   if (checks >= 40) window.clearInterval(bridgeWatcher);
 }, 250);
 
