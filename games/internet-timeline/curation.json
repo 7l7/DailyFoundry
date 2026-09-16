@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "defaultStatus": "core",
   "specialist": [
     "extra-1969-arpanet",
@@ -51,11 +51,7 @@
     "fun-2015-periscope",
     "fun-2017-hq-trivia"
   ],
-  "sourceRepair": [
-    "fun-2009-facebook-like",
-    "extra-2005-reddit",
-    "extra-2010-pinterest"
-  ],
+  "sourceRepair": [],
   "notes": {
     "specialist": "Accurate or potentially useful, but ordinary players often lack a fair temporal reference. Keep for Hard/specialist use until data or better framing proves otherwise.",
     "retire": "Do not schedule. Current framing, evidence, or game value is not strong enough. Repair and re-review before reactivation.",
