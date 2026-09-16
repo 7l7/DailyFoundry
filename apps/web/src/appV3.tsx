@@ -6,6 +6,9 @@ import{hashSeed,utcDayKey}from"@dailyfoundry/core";
 import baseQuestions from"../../../games/internet-timeline/questions.json";
 import extraQuestions from"../../../games/internet-timeline/questions-extra.json";
 import funQuestions from"../../../games/internet-timeline/questions-fun.json";
+import curation from"../../../games/internet-timeline/curation.json";
+import questionOverrides from"../../../games/internet-timeline/question-overrides.json";
+import gameplayRoles from"../../../games/internet-timeline/gameplay-roles.json";
 import{SHARE_POSTER_TEMPLATE}from"./sharePosterTemplate";
 import"./styles.css";
 import"./archive.css";
@@ -24,11 +27,21 @@ type ProfileKey="mix"|"culture"|"builders"|"social"|"close"|"hard"|"modern";
 type Profile={key:ProfileKey;label:string;subtitle:string;categories?:string[];minYear?:number;maxYear?:number;difficulty:Difficulty[];close?:boolean};
 
 const legacyQuestions:Question[]=[...baseQuestions,...extraQuestions]as Question[];
-const questions:Question[]=[...baseQuestions,...extraQuestions,...funQuestions]as Question[];
+const overrideMap=(questionOverrides as {questions:Record<string,Partial<Question>>}).questions;
+const applyOverride=(q:Question):Question=>({...q,...(overrideMap[q.id]??{})});
+const questions:Question[]=[...baseQuestions,...extraQuestions,...funQuestions].map(q=>applyOverride(q as Question));
 const byId=new Map(questions.map(q=>[q.id,q]));
+const specialistIds=new Set((curation as {specialist:string[]}).specialist);
+const retiredIds=new Set((curation as {retire:string[]}).retire);
+const roleSets={
+ anchor:new Set((gameplayRoles as {anchor:string[]}).anchor),
+ confusion:new Set((gameplayRoles as {confusion:string[]}).confusion),
+ surprise:new Set((gameplayRoles as {surprise:string[]}).surprise),
+ stretch:new Set((gameplayRoles as {stretch:string[]}).stretch)
+};
 const GAME_ID="internet-timeline",GUESSES=5,CARDS_NEEDED=6,DAY_MS=86_400_000;
 const HISTORY_KEY=`dailyfoundry:${GAME_ID}:history:v2`,REPLAY_KEY=`dailyfoundry:${GAME_ID}:replays:v1`;
-const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v6",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
+const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v7",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
 const SLOT_ROLES:SlotRole[]=["anchor","warmup","memory","surprise","tension","stretch"];
 const FIXED_DECK_IDS=[
  ["web-2022","web-1994","web-2008","web-2001","web-1976","web-2015"],
@@ -57,7 +70,15 @@ function appealOf(q:Question):Appeal{if(q.appeal)return q.appeal;if(q.id.startsW
 function entityOf(q:Question){if(q.entity)return q.entity;const text=`${q.id} ${q.prompt}`;return ENTITY_PATTERNS.find(([re])=>re.test(text))?.[1]??q.id}
 function isFun(q:Question){return q.id.startsWith("fun-")||["Culture","Gaming","Entertainment","Video","Social","Community"].includes(q.category)}
 function profilePenalty(q:Question,p:Profile){let v=0;if(p.categories&&!p.categories.includes(q.category))v+=260;if(p.minYear&&q.answerYear<p.minYear)v+=280;if(p.maxYear&&q.answerYear>p.maxYear)v+=280;return v}
-function rolePenalty(q:Question,role:SlotRole,p:Profile){const appeal=appealOf(q),difficulty=difficultyOf(q);let v=0;
+function explicitRolePenalty(q:Question,role:SlotRole){
+ if(role==="anchor")return roleSets.anchor.has(q.id)?-220:90;
+ if(role==="warmup")return roleSets.anchor.has(q.id)?-90:0;
+ if(role==="memory"||role==="tension")return roleSets.confusion.has(q.id)?-190:80;
+ if(role==="surprise")return roleSets.surprise.has(q.id)?-260:130;
+ if(role==="stretch")return roleSets.stretch.has(q.id)?-210:roleSets.confusion.has(q.id)?-70:70;
+ return 0;
+}
+function rolePenalty(q:Question,role:SlotRole,p:Profile){const appeal=appealOf(q),difficulty=difficultyOf(q);let v=explicitRolePenalty(q,role);
  if(role==="anchor"){if(appeal!=="mainstream")v+=appeal==="known"?180:650;if(difficulty==="hard")v+=700;}
  if(role==="warmup"){if(appeal==="niche")v+=600;if(difficulty==="hard")v+=600;}
  if(role==="memory"){if(appeal==="niche")v+=350;}
@@ -97,8 +118,9 @@ function legacyBuildDeck(dayIndex:number,recentDays:Question[][],profile:Profile
 function buildDeck(dayIndex:number,recentDays:Question[][],profile:Profile){
  const blocked=new Set(recentDays.flat().map(q=>q.id));
  const entityDays=recentDays.slice(-ENTITY_COOLDOWN_DAYS),recentEntities=new Set(entityDays.flat().map(entityOf));
- const available=questions.filter(q=>!blocked.has(q.id));
- const pool=available.length>=CARDS_NEEDED?available:questions,selected:Question[]=[];
+ const active=questions.filter(q=>!retiredIds.has(q.id)&&(profile.key==="hard"||!specialistIds.has(q.id)));
+ const available=active.filter(q=>!blocked.has(q.id));
+ const pool=available.length>=CARDS_NEEDED?available:active,selected:Question[]=[];
  for(let slot=0;slot<CARDS_NEEDED;slot++){
   const unique=pool.filter(q=>!selected.some(x=>x.id===q.id||x.answerYear===q.answerYear));
   const remaining=(unique.length?unique:pool.filter(q=>!selected.some(x=>x.id===q.id))).sort((a,b)=>candidateScore(a,selected,dayIndex,slot,profile,recentEntities)-candidateScore(b,selected,dayIndex,slot,profile,recentEntities));
