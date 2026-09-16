@@ -138,16 +138,18 @@ async function handleShareButton(event: Event) {
   const isSave = button.classList.contains("secondary");
   const isShare = button.classList.contains("primary") && /share result|shared/i.test(button.textContent || "");
   if (!isSave && !isShare) return;
-  const anchor = document.querySelector<HTMLElement>(".template-poster");
+  const anchor = document.querySelector<HTMLAnchorElement>("a.template-poster");
   const data = anchor && readData(anchor);
   if (!data) return;
+  const shareUrl = anchor?.href || `${location.origin}/?ref=share`;
   event.preventDefault(); event.stopPropagation(); (event as Event & { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.();
+  track("share_click", { game: "internet-timeline", puzzle: data.puzzle, score: data.score, method: isShare ? "native_image" : "save_image" });
   const blob = await renderPng(data);
   if (isShare) {
     const file = new File([blob], `internet-timeline-${data.puzzle.replace("#", "")}.png`, { type: "image/png" });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: `Internet Timeline ${data.puzzle}`, text: `${location.origin}/?ref=share` });
-      track("share_success", { game: "internet-timeline", method: "native_image_clean" });
+      await navigator.share({ files: [file], title: `Internet Timeline ${data.puzzle}`, text: `Think you can beat ${data.score}/5? ${shareUrl}` });
+      track("share_success", { game: "internet-timeline", puzzle: data.puzzle, score: data.score, method: "native_image_clean" });
       button.textContent = "Shared";
       return;
     }
@@ -157,7 +159,7 @@ async function handleShareButton(event: Event) {
   a.href = url;
   a.download = `internet-timeline-${data.puzzle.replace("#", "")}.png`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-  track("share_success", { game: "internet-timeline", method: "image_download_clean" });
+  track("share_success", { game: "internet-timeline", puzzle: data.puzzle, score: data.score, method: "image_download_clean" });
   button.textContent = "Card saved";
 }
 
