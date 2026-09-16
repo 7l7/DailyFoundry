@@ -8,12 +8,14 @@ const base = read('questions.json');
 const extra = read('questions-extra.json');
 const fun = read('questions-fun.json');
 const curation = read('curation.json');
+const overrides = read('question-overrides.json').questions || {};
 
 const all = [...base, ...extra, ...fun];
 const byId = new Map(all.map((q) => [q.id, q]));
 const specialist = new Set(curation.specialist || []);
 const retired = new Set(curation.retire || []);
 const statusOf = (q) => retired.has(q.id) ? 'retire' : specialist.has(q.id) ? 'specialist' : 'core';
+const meta = (q) => overrides[q.id] || {};
 
 const GAME_ID = 'internet-timeline';
 const SCHEDULE_VERSION = 'schedule-v6';
@@ -42,9 +44,9 @@ const ENTITY_PATTERNS = [
 function hashSeed(input){let hash=2166136261;for(let i=0;i<input.length;i++){hash^=input.charCodeAt(i);hash=Math.imul(hash,16777619)}return hash>>>0}
 function profileForPuzzle(n){return n<=2?PROFILES[0]:PROFILES[(n-3)%PROFILES.length]}
 function eraBucket(y){return y<1990?0:y<2000?1:y<2010?2:y<2020?3:4}
-function difficultyOf(q){if(q.difficulty)return q.difficulty;if(q.answerYear<1988)return'hard';if(q.answerYear>=2001&&['Social','Gaming','AI','Mobile','Entertainment','Culture'].includes(q.category))return'easy';if(['Security','Web'].includes(q.category)&&q.answerYear<1995)return'hard';return'medium'}
-function appealOf(q){if(q.appeal)return q.appeal;if(q.id.startsWith('web-'))return q.answerYear>=1994?'mainstream':'known';if(difficultyOf(q)==='hard'&&q.answerYear<1995)return'niche';if(['Social','Gaming','Culture','Entertainment','AI','Mobile','Video'].includes(q.category))return'mainstream';return'known'}
-function entityOf(q){if(q.entity)return q.entity;const text=`${q.id} ${q.prompt}`;return ENTITY_PATTERNS.find(([re])=>re.test(text))?.[1]??q.id}
+function difficultyOf(q){if(meta(q).difficulty)return meta(q).difficulty;if(q.difficulty)return q.difficulty;if(q.answerYear<1988)return'hard';if(q.answerYear>=2001&&['Social','Gaming','AI','Mobile','Entertainment','Culture'].includes(q.category))return'easy';if(['Security','Web'].includes(q.category)&&q.answerYear<1995)return'hard';return'medium'}
+function appealOf(q){if(meta(q).appeal)return meta(q).appeal;if(q.appeal)return q.appeal;if(q.id.startsWith('web-'))return q.answerYear>=1994?'mainstream':'known';if(difficultyOf(q)==='hard'&&q.answerYear<1995)return'niche';if(['Social','Gaming','Culture','Entertainment','AI','Mobile','Video'].includes(q.category))return'mainstream';return'known'}
+function entityOf(q){if(meta(q).entity)return meta(q).entity;if(q.entity)return q.entity;const text=`${q.id} ${q.prompt}`;return ENTITY_PATTERNS.find(([re])=>re.test(text))?.[1]??q.id}
 function isFun(q){return q.id.startsWith('fun-')||['Culture','Gaming','Entertainment','Video','Social','Community'].includes(q.category)}
 function profilePenalty(q,p){let v=0;if(p.categories&&!p.categories.includes(q.category))v+=260;if(p.minYear&&q.answerYear<p.minYear)v+=280;if(p.maxYear&&q.answerYear>p.maxYear)v+=280;return v}
 function rolePenalty(q,role,p){const appeal=appealOf(q),difficulty=difficultyOf(q);let v=0;if(role==='anchor'){if(appeal!=='mainstream')v+=appeal==='known'?180:650;if(difficulty==='hard')v+=700}if(role==='warmup'){if(appeal==='niche')v+=600;if(difficulty==='hard')v+=600}if(role==='memory'&&appeal==='niche')v+=350;if(role==='surprise'){if(!isFun(q))v+=240;if(appeal==='niche')v+=300}if(role==='tension'){if(difficulty==='easy')v+=80;if(appeal==='niche')v+=240}if(role==='stretch'&&p.key!=='hard'&&appeal==='niche')v+=400;if(p.key!=='hard'&&difficulty==='hard'&&role!=='stretch')v+=450;return v}
