@@ -6,6 +6,9 @@ import{hashSeed,utcDayKey}from"@dailyfoundry/core";
 import baseQuestions from"../../../games/internet-timeline/questions.json";
 import extraQuestions from"../../../games/internet-timeline/questions-extra.json";
 import funQuestions from"../../../games/internet-timeline/questions-fun.json";
+import curation from"../../../games/internet-timeline/curation.json";
+import questionOverrides from"../../../games/internet-timeline/question-overrides.json";
+import gameplayRoles from"../../../games/internet-timeline/gameplay-roles.json";
 import{SHARE_POSTER_TEMPLATE}from"./sharePosterTemplate";
 import"./styles.css";
 import"./archive.css";
@@ -24,11 +27,21 @@ type ProfileKey="mix"|"culture"|"builders"|"social"|"close"|"hard"|"modern";
 type Profile={key:ProfileKey;label:string;subtitle:string;categories?:string[];minYear?:number;maxYear?:number;difficulty:Difficulty[];close?:boolean};
 
 const legacyQuestions:Question[]=[...baseQuestions,...extraQuestions]as Question[];
-const questions:Question[]=[...baseQuestions,...extraQuestions,...funQuestions]as Question[];
+const overrideMap=(questionOverrides as {questions:Record<string,Partial<Question>>}).questions;
+const applyOverride=(q:Question):Question=>({...q,...(overrideMap[q.id]??{})});
+const questions:Question[]=[...baseQuestions,...extraQuestions,...funQuestions].map(q=>applyOverride(q as Question));
 const byId=new Map(questions.map(q=>[q.id,q]));
+const specialistIds=new Set((curation as {specialist:string[]}).specialist);
+const retiredIds=new Set((curation as {retire:string[]}).retire);
+const roleSets={
+ anchor:new Set((gameplayRoles as {anchor:string[]}).anchor),
+ confusion:new Set((gameplayRoles as {confusion:string[]}).confusion),
+ surprise:new Set((gameplayRoles as {surprise:string[]}).surprise),
+ stretch:new Set((gameplayRoles as {stretch:string[]}).stretch)
+};
 const GAME_ID="internet-timeline",GUESSES=5,CARDS_NEEDED=6,DAY_MS=86_400_000;
 const HISTORY_KEY=`dailyfoundry:${GAME_ID}:history:v2`,REPLAY_KEY=`dailyfoundry:${GAME_ID}:replays:v1`;
-const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v6",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
+const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v7",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
 const SLOT_ROLES:SlotRole[]=["anchor","warmup","memory","surprise","tension","stretch"];
 const FIXED_DECK_IDS=[
  ["web-2022","web-1994","web-2008","web-2001","web-1976","web-2015"],
@@ -57,7 +70,15 @@ function appealOf(q:Question):Appeal{if(q.appeal)return q.appeal;if(q.id.startsW
 function entityOf(q:Question){if(q.entity)return q.entity;const text=`${q.id} ${q.prompt}`;return ENTITY_PATTERNS.find(([re])=>re.test(text))?.[1]??q.id}
 function isFun(q:Question){return q.id.startsWith("fun-")||["Culture","Gaming","Entertainment","Video","Social","Community"].includes(q.category)}
 function profilePenalty(q:Question,p:Profile){let v=0;if(p.categories&&!p.categories.includes(q.category))v+=260;if(p.minYear&&q.answerYear<p.minYear)v+=280;if(p.maxYear&&q.answerYear>p.maxYear)v+=280;return v}
-function rolePenalty(q:Question,role:SlotRole,p:Profile){const appeal=appealOf(q),difficulty=difficultyOf(q);let v=0;
+function explicitRolePenalty(q:Question,role:SlotRole){
+ if(role==="anchor")return roleSets.anchor.has(q.id)?-220:90;
+ if(role==="warmup")return roleSets.anchor.has(q.id)?-90:0;
+ if(role==="memory"||role==="tension")return roleSets.confusion.has(q.id)?-190:80;
+ if(role==="surprise")return roleSets.surprise.has(q.id)?-260:130;
+ if(role==="stretch")return roleSets.stretch.has(q.id)?-210:roleSets.confusion.has(q.id)?-70:70;
+ return 0;
+}
+function rolePenalty(q:Question,role:SlotRole,p:Profile){const appeal=appealOf(q),difficulty=difficultyOf(q);let v=explicitRolePenalty(q,role);
  if(role==="anchor"){if(appeal!=="mainstream")v+=appeal==="known"?180:650;if(difficulty==="hard")v+=700;}
  if(role==="warmup"){if(appeal==="niche")v+=600;if(difficulty==="hard")v+=600;}
  if(role==="memory"){if(appeal==="niche")v+=350;}
@@ -97,8 +118,9 @@ function legacyBuildDeck(dayIndex:number,recentDays:Question[][],profile:Profile
 function buildDeck(dayIndex:number,recentDays:Question[][],profile:Profile){
  const blocked=new Set(recentDays.flat().map(q=>q.id));
  const entityDays=recentDays.slice(-ENTITY_COOLDOWN_DAYS),recentEntities=new Set(entityDays.flat().map(entityOf));
- const available=questions.filter(q=>!blocked.has(q.id));
- const pool=available.length>=CARDS_NEEDED?available:questions,selected:Question[]=[];
+ const active=questions.filter(q=>!retiredIds.has(q.id)&&(profile.key==="hard"||!specialistIds.has(q.id)));
+ const available=active.filter(q=>!blocked.has(q.id));
+ const pool=available.length>=CARDS_NEEDED?available:active,selected:Question[]=[];
  for(let slot=0;slot<CARDS_NEEDED;slot++){
   const unique=pool.filter(q=>!selected.some(x=>x.id===q.id||x.answerYear===q.answerYear));
   const remaining=(unique.length?unique:pool.filter(q=>!selected.some(x=>x.id===q.id))).sort((a,b)=>candidateScore(a,selected,dayIndex,slot,profile,recentEntities)-candidateScore(b,selected,dayIndex,slot,profile,recentEntities));
@@ -144,6 +166,6 @@ function InternetTimeline(){
  function next(){setRoundIndex(v=>v+1);setSelectedSlot(null);setRevealed(false)}
  async function copy(){const shareUrl=practiceMode?`${location.origin}/?practice=${practiceSeed}&ref=share`:`${location.origin}/?puzzle=${puzzle}&ref=share`;const score=played.filter(r=>r.correct).length,label=practiceMode?`Internet Timeline ${profile.label}`:`Internet Timeline #${puzzle} · ${profile.label}`,text=shareText(label,score,played,shareUrl);track("share_click",{game:GAME_ID,puzzle,method:"copy",mode,challenge_profile:profile.key});try{await navigator.clipboard.writeText(text);setShareState("copied");track("share_success",{game:GAME_ID,puzzle,method:"clipboard",mode,challenge_profile:profile.key})}catch{prompt("Copy your challenge:",text)}}
  if(complete){const score=played.filter(r=>r.correct).length,tone=shareTone(score),shareUrl=practiceMode?`${location.origin}/?practice=${practiceSeed}&ref=share`:`${location.origin}/?puzzle=${puzzle}&ref=share`,label=practiceMode?`P${String(practiceSeed).slice(-4)}`:`#${puzzle}`,finalTimeline=sortChronologically([anchor,...played.map(r=>r.question)]);return<main><header className="topbar"><strong>Internet Timeline</strong><span>{practiceMode?"Practice":`#${puzzle}`}</span></header><section className="result-card"><ProfileBanner profile={profile} mode={mode}/><div className="result-heading"><div><p className="eyebrow">{practiceMode?"Practice result":replayMode?"Replay result":"Today’s result"}</p><h1>{score}<small>/5</small></h1></div><p className="verdict">{tone.short}</p></div><SharePoster label={label} played={played} streakCount={practiceMode?0:streakCount} shareUrl={shareUrl}/><div className="share-actions"><button className="primary" onClick={touch?()=>setShareState("shared"):copy}>{touch?(shareState==="shared"?"Shared":"Share result"):(shareState==="copied"?"Challenge copied":"Copy challenge")}</button><button className="secondary" onClick={()=>setShareState("saved")}>{shareState==="saved"?"Card saved":"Save poster"}</button></div><div className="result-secondary-actions"><a className="practice-button" href={`/?practice=${nextPractice}`}>Play another random timeline</a><a className="archive-button" href="/?archive=1">Past puzzles</a>{mode!=="daily"&&<a className="today-button" href="/">Today’s challenge</a>}{mode==="archive"&&<a className="replay-button" href={`/?puzzle=${puzzle}&replay=1`}>Replay #{puzzle}</a>}</div>{mode==="daily"&&<><div className="stats-grid"><div><strong>{Object.keys(history).length}</strong><span>Played</span></div><div><strong>{streakCount}</strong><span>Current streak</span></div><div><strong>{maxStreak}</strong><span>Best streak</span></div><div><strong>{Object.values(history).filter(x=>x.rounds.every(r=>r.correct)).length}</strong><span>Perfect days</span></div></div><div className="next-drop"><span>Next timeline in</span><strong>{formatCountdown(timer)}</strong></div></>}</section><section className="recap-card"><div className="recap-heading"><div><p className="eyebrow">Answer</p><h2>The full timeline</h2></div><span>{finalTimeline[0]?.answerYear}–{finalTimeline.at(-1)?.answerYear}</span></div><div className="recap-list">{finalTimeline.map(q=><article key={q.id} className="recap-row"><strong>{q.answerYear}</strong><div><span>{q.category}</span><p>{q.prompt}</p></div></article>)}</div></section></main>}
- return<main><header className="topbar"><strong>Internet Timeline</strong><span>{practiceMode?"Practice":`#${puzzle}`}</span></header><section className="game-shell"><ProfileBanner profile={profile} mode={mode}/><div className="game-meta"><span>{practiceMode?"Endless practice":replayMode?"Replay puzzle":"Place the moment"}</span><span>{roundIndex+1}/{GUESSES}</span></div><div className="challenge-card"><span className="category">{current?.category}</span><h1 className="question">{current?.prompt}</h1><p className="instruction">Tap the gap where this moment belongs.</p></div><div className="timeline-stack">{timeline.map((item,index)=><React.Fragment key={item.id}><button className={`slot ${selectedSlot===index?"selected":""} ${revealed&&correctIndex===index?"correct-slot":""}`} onClick={()=>!revealed&&setSelectedSlot(index)}><span>{revealed&&correctIndex===index?"Correct spot":selectedSlot===index?"Place here":"+"}</span></button><article className="event-card"><div><span className="event-year">{item.answerYear}</span><span className="event-category">{item.category}</span></div><p>{item.prompt}</p></article>{index===timeline.length-1&&<button className={`slot ${selectedSlot===timeline.length?"selected":""} ${revealed&&correctIndex===timeline.length?"correct-slot":""}`} onClick={()=>!revealed&&setSelectedSlot(timeline.length)}><span>{revealed&&correctIndex===timeline.length?"Correct spot":selectedSlot===timeline.length?"Place here":"+"}</span></button>}</React.Fragment>)}</div>{!revealed?<button className="primary" disabled={selectedSlot===null} onClick={lock}>Lock it in</button>:<div className={`reveal ${currentCorrect?"good":"miss"}`}><p>{currentCorrect?"Nailed it.":`It was ${current?.answerYear}.`}</p>{current?.explanation&&<small>{current.explanation}</small>}<button className="primary" onClick={next}>{roundIndex+1===GUESSES?"See result":"Next moment"}</button></div>}<div className="play-more-links"><a href="/?archive=1">Past puzzles</a>{!practiceMode&&<a href={`/?practice=${nextPractice}`}>Random practice</a>}{practiceMode&&<a href="/">Today’s challenge</a>}</div></section><footer>Built with DailyFoundry</footer></main>
+ return<main><header className="topbar"><strong>Internet Timeline</strong><span>{practiceMode?"Practice":`#${puzzle}`}</span></header><section className="game-shell"><ProfileBanner profile={profile} mode={mode}/><div className="game-meta"><span>{practiceMode?"Endless practice":replayMode?"Replay puzzle":"Place the moment"}</span><span>{roundIndex+1}/{GUESSES}</span></div><div className="challenge-card"><span className="category">{current?.category}</span><h1 className="question">{current?.prompt}</h1><p className="instruction">Tap the gap where this moment belongs.</p></div><div className="timeline-stack">{timeline.map((item,index)=><React.Fragment key={item.id}><button className={`slot ${selectedSlot===index?"selected":""} ${revealed&&correctIndex===index?"correct-slot":""}`} onClick={()=>!revealed&&setSelectedSlot(index)}><span>{revealed&&correctIndex===index?"Correct spot":selectedSlot===index?"Place here":"+"}</span></button><article className="event-card"><div><span className="event-year">{item.answerYear}</span><span className="event-category">{item.category}</span></div><p>{item.prompt}</p></article>{index===timeline.length-1&&<button className={`slot ${selectedSlot===timeline.length?"selected":""} ${revealed&&correctIndex===timeline.length?"correct-slot":""}`} onClick={()=>!revealed&&setSelectedSlot(index)}><span>{revealed&&correctIndex===timeline.length?"Correct spot":selectedSlot===timeline.length?"Place here":"+"}</span></button>}</React.Fragment>)}</div>{!revealed?<button className="primary" disabled={selectedSlot===null} onClick={lock}>Lock it in</button>:<div className={`reveal ${currentCorrect?"good":"miss"}`}><p>{currentCorrect?"Nailed it.":`It was ${current?.answerYear}.`}</p>{current?.explanation&&<small>{current.explanation}</small>}<button className="primary" onClick={next}>{roundIndex+1===GUESSES?"See result":"Next moment"}</button></div>}<div className="play-more-links"><a href="/?archive=1">Past puzzles</a>{!practiceMode&&<a href={`/?practice=${nextPractice}`}>Random practice</a>}{practiceMode&&<a href="/">Today’s challenge</a>}</div></section><footer>Built with DailyFoundry</footer></main>
 }
 ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><InternetTimeline/><Analytics/></React.StrictMode>);
