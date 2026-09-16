@@ -6,7 +6,6 @@ import{hashSeed,utcDayKey}from"@dailyfoundry/core";
 import baseQuestions from"../../../games/internet-timeline/questions.json";
 import extraQuestions from"../../../games/internet-timeline/questions-extra.json";
 import funQuestions from"../../../games/internet-timeline/questions-fun.json";
-import{specialistIds,retiredIds}from"./curation";
 import{SHARE_POSTER_TEMPLATE}from"./sharePosterTemplate";
 import"./styles.css";
 import"./archive.css";
@@ -15,7 +14,6 @@ import"./profiles.css";
 type Difficulty="easy"|"medium"|"hard";
 type Appeal="mainstream"|"known"|"niche";
 type SlotRole="anchor"|"warmup"|"memory"|"surprise"|"tension"|"stretch";
-type CurationStatus="core"|"specialist"|"retire";
 type Question={id:string;prompt:string;answerYear:number;category:string;explanation?:string;sourceLabel?:string;sourceUrl?:string;difficulty?:Difficulty;entity?:string;appeal?:Appeal};
 type PlayedRound={question:Question;correct:boolean;chosenIndex:number;correctIndex:number};
 type SavedResult={day:string;rounds:PlayedRound[];completedAt:string};
@@ -30,7 +28,7 @@ const questions:Question[]=[...baseQuestions,...extraQuestions,...funQuestions]a
 const byId=new Map(questions.map(q=>[q.id,q]));
 const GAME_ID="internet-timeline",GUESSES=5,CARDS_NEEDED=6,DAY_MS=86_400_000;
 const HISTORY_KEY=`dailyfoundry:${GAME_ID}:history:v2`,REPLAY_KEY=`dailyfoundry:${GAME_ID}:replays:v1`;
-const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v7",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
+const LAUNCH_DAY=Date.UTC(2026,8,8),SCHEDULE_VERSION="schedule-v6",LEGACY_DAYS=9,RECENT_DAYS_BLOCKED=14,ENTITY_COOLDOWN_DAYS=7;
 const SLOT_ROLES:SlotRole[]=["anchor","warmup","memory","surprise","tension","stretch"];
 const FIXED_DECK_IDS=[
  ["web-2022","web-1994","web-2008","web-2001","web-1976","web-2015"],
@@ -54,7 +52,6 @@ function dayForPuzzle(n:number){return new Date(LAUNCH_DAY+(n-1)*DAY_MS).toISOSt
 function todayPuzzle(){return puzzleNumber(utcDayKey())}
 function profileForPuzzle(n:number){return n<=2?PROFILES[0]:PROFILES[(n-3)%PROFILES.length]}
 function eraBucket(y:number){return y<1990?0:y<2000?1:y<2010?2:y<2020?3:4}
-function curationStatus(q:Question):CurationStatus{return retiredIds.has(q.id)?"retire":specialistIds.has(q.id)?"specialist":"core"}
 function difficultyOf(q:Question):Difficulty{if(q.difficulty)return q.difficulty;if(q.answerYear<1988)return"hard";if(q.answerYear>=2001&&["Social","Gaming","AI","Mobile","Entertainment","Culture"].includes(q.category))return"easy";if(["Security","Web"].includes(q.category)&&q.answerYear<1995)return"hard";return"medium"}
 function appealOf(q:Question):Appeal{if(q.appeal)return q.appeal;if(q.id.startsWith("web-"))return q.answerYear>=1994?"mainstream":"known";if(difficultyOf(q)==="hard"&&q.answerYear<1995)return"niche";if(["Social","Gaming","Culture","Entertainment","AI","Mobile","Video"].includes(q.category))return"mainstream";return"known"}
 function entityOf(q:Question){if(q.entity)return q.entity;const text=`${q.id} ${q.prompt}`;return ENTITY_PATTERNS.find(([re])=>re.test(text))?.[1]??q.id}
@@ -79,12 +76,10 @@ function candidateScore(q:Question,selected:Question[],dayIndex:number,slot:numb
  const eraCount=selected.filter(x=>eraBucket(x.answerYear)===eraBucket(q.answerYear)).length;
  const categoryCount=selected.filter(x=>x.category===q.category).length;
  const nicheCount=selected.filter(x=>appealOf(x)==="niche").length;
- const specialistCount=selected.filter(x=>curationStatus(x)==="specialist").length;
  const nichePenalty=appealOf(q)==="niche"&&nicheCount>=1?700:0;
- const specialistPenalty=curationStatus(q)==="specialist"?(p.key==="hard"&&specialistCount===0?180:1400):0;
  const minDist=selected.length?Math.min(...selected.map(x=>Math.abs(x.answerYear-q.answerYear))):50;
  const distanceTerm=p.close?Math.min(minDist,20)*1.8:-Math.min(minDist,20)*1.1;
- return sameYearPenalty+sameEntityPenalty+nichePenalty+specialistPenalty+profilePenalty(q,p)+rolePenalty(q,role,p)+difficultyPenalty+categoryCount*92+eraCount*24+distanceTerm+tie;
+ return sameYearPenalty+sameEntityPenalty+nichePenalty+profilePenalty(q,p)+rolePenalty(q,role,p)+difficultyPenalty+categoryCount*92+eraCount*24+distanceTerm+tie;
 }
 function legacyCandidateScore(q:Question,selected:Question[],dayIndex:number,slot:number,p:Profile){
  const tie=hashSeed(`${GAME_ID}:schedule-v4:${dayIndex}:${slot}:${q.id}:${p.key}`)/0xffffffff;
@@ -102,13 +97,12 @@ function legacyBuildDeck(dayIndex:number,recentDays:Question[][],profile:Profile
 function buildDeck(dayIndex:number,recentDays:Question[][],profile:Profile){
  const blocked=new Set(recentDays.flat().map(q=>q.id));
  const entityDays=recentDays.slice(-ENTITY_COOLDOWN_DAYS),recentEntities=new Set(entityDays.flat().map(entityOf));
- const eligible=questions.filter(q=>curationStatus(q)!=="retire"&&(profile.key==="hard"||curationStatus(q)==="core"));
- const available=eligible.filter(q=>!blocked.has(q.id));
- const pool=available.length>=CARDS_NEEDED?available:eligible,selected:Question[]=[];
+ const available=questions.filter(q=>!blocked.has(q.id));
+ const pool=available.length>=CARDS_NEEDED?available:questions,selected:Question[]=[];
  for(let slot=0;slot<CARDS_NEEDED;slot++){
   const unique=pool.filter(q=>!selected.some(x=>x.id===q.id||x.answerYear===q.answerYear));
   const remaining=(unique.length?unique:pool.filter(q=>!selected.some(x=>x.id===q.id))).sort((a,b)=>candidateScore(a,selected,dayIndex,slot,profile,recentEntities)-candidateScore(b,selected,dayIndex,slot,profile,recentEntities));
-  if(!remaining[0])throw new Error("Not enough curated questions");selected.push(remaining[0]);
+  if(!remaining[0])throw new Error("Not enough questions");selected.push(remaining[0]);
  }
  return selected;
 }
@@ -143,10 +137,10 @@ function InternetTimeline(){
  const[selectedSlot,setSelectedSlot]=useState<number|null>(null),[revealed,setRevealed]=useState(false),[played,setPlayed]=useState<PlayedRound[]>(saved?.rounds??[]),[shareState,setShareState]=useState<ShareState>("idle"),[timer,setTimer]=useState(countdown()),[touch,setTouch]=useState(false);
  const started=useRef(Date.now()),complete=roundIndex>=cards.length,current=complete?null:cards[roundIndex],correctIndex=current?correctInsertionIndex(timeline,current):-1,currentCorrect=selectedSlot===correctIndex;
  const streakCount=streak(history,utcDayKey()),maxStreak=bestStreak(history),nextPractice=Math.floor(Date.now()/1000)+Math.floor(Math.random()*10000);
- useEffect(()=>{setTouch(isTouch());track(mode==="practice"?"practice_start":mode==="archive"?"archive_start":"game_start",{game:GAME_ID,puzzle,mode,challenge_profile:profile.key,ref:params.get("ref")||"direct",deck_mainstream:deck.filter(q=>appealOf(q)==="mainstream").length,deck_niche:deck.filter(q=>appealOf(q)==="niche").length,deck_fun:deck.filter(isFun).length,deck_specialist:deck.filter(q=>curationStatus(q)==="specialist").length})},[]);
+ useEffect(()=>{setTouch(isTouch());track(mode==="practice"?"practice_start":mode==="archive"?"archive_start":"game_start",{game:GAME_ID,puzzle,mode,challenge_profile:profile.key,ref:params.get("ref")||"direct",deck_mainstream:deck.filter(q=>appealOf(q)==="mainstream").length,deck_niche:deck.filter(q=>appealOf(q)==="niche").length,deck_fun:deck.filter(isFun).length})},[]);
  useEffect(()=>{if(!complete)return;const id=setInterval(()=>setTimer(countdown()),1000);return()=>clearInterval(id)},[complete]);
  useEffect(()=>{if(!complete||played.length!==cards.length||saved)return;const score=played.filter(r=>r.correct).length,base={game:GAME_ID,puzzle,score,mode,challenge_profile:profile.key,duration_seconds:Math.max(1,Math.round((Date.now()-started.current)/1000))};if(mode==="practice"){track("practice_complete",base);return}if(mode==="archive"){const prev=replays[String(puzzle)]??{bestScore:0,plays:0},next={...replays,[String(puzzle)]:{bestScore:Math.max(prev.bestScore,score),plays:prev.plays+1}};localStorage.setItem(REPLAY_KEY,JSON.stringify(next));setReplays(next);track("archive_complete",base)}else{const next={...history,[day]:{day,rounds:played,completedAt:new Date().toISOString()}};localStorage.setItem(HISTORY_KEY,JSON.stringify(next));setHistory(next);track("game_complete",base)}},[complete,played.length]);
- function lock(){if(!current||selectedSlot===null||revealed)return;setPlayed(p=>[...p,{question:current,correct:currentCorrect,chosenIndex:selectedSlot,correctIndex}]);setTimeline(p=>{const n=[...p];n.splice(correctIndex,0,current);return n});track("round_complete",{game:GAME_ID,puzzle,round:roundIndex+1,correct:currentCorrect,difficulty:difficultyOf(current),appeal:appealOf(current),entity:entityOf(current),curation:curationStatus(current),mode,challenge_profile:profile.key});setRevealed(true)}
+ function lock(){if(!current||selectedSlot===null||revealed)return;setPlayed(p=>[...p,{question:current,correct:currentCorrect,chosenIndex:selectedSlot,correctIndex}]);setTimeline(p=>{const n=[...p];n.splice(correctIndex,0,current);return n});track("round_complete",{game:GAME_ID,puzzle,round:roundIndex+1,correct:currentCorrect,difficulty:difficultyOf(current),appeal:appealOf(current),entity:entityOf(current),mode,challenge_profile:profile.key});setRevealed(true)}
  function next(){setRoundIndex(v=>v+1);setSelectedSlot(null);setRevealed(false)}
  async function copy(){const shareUrl=practiceMode?`${location.origin}/?practice=${practiceSeed}&ref=share`:`${location.origin}/?puzzle=${puzzle}&ref=share`;const score=played.filter(r=>r.correct).length,label=practiceMode?`Internet Timeline ${profile.label}`:`Internet Timeline #${puzzle} · ${profile.label}`,text=shareText(label,score,played,shareUrl);track("share_click",{game:GAME_ID,puzzle,method:"copy",mode,challenge_profile:profile.key});try{await navigator.clipboard.writeText(text);setShareState("copied");track("share_success",{game:GAME_ID,puzzle,method:"clipboard",mode,challenge_profile:profile.key})}catch{prompt("Copy your challenge:",text)}}
  if(complete){const score=played.filter(r=>r.correct).length,tone=shareTone(score),shareUrl=practiceMode?`${location.origin}/?practice=${practiceSeed}&ref=share`:`${location.origin}/?puzzle=${puzzle}&ref=share`,label=practiceMode?`P${String(practiceSeed).slice(-4)}`:`#${puzzle}`,finalTimeline=sortChronologically([anchor,...played.map(r=>r.question)]);return<main><header className="topbar"><strong>Internet Timeline</strong><span>{practiceMode?"Practice":`#${puzzle}`}</span></header><section className="result-card"><ProfileBanner profile={profile} mode={mode}/><div className="result-heading"><div><p className="eyebrow">{practiceMode?"Practice result":replayMode?"Replay result":"Today’s result"}</p><h1>{score}<small>/5</small></h1></div><p className="verdict">{tone.short}</p></div><SharePoster label={label} played={played} streakCount={practiceMode?0:streakCount} shareUrl={shareUrl}/><div className="share-actions"><button className="primary" onClick={touch?()=>setShareState("shared"):copy}>{touch?(shareState==="shared"?"Shared":"Share result"):(shareState==="copied"?"Challenge copied":"Copy challenge")}</button><button className="secondary" onClick={()=>setShareState("saved")}>{shareState==="saved"?"Card saved":"Save poster"}</button></div><div className="result-secondary-actions"><a className="practice-button" href={`/?practice=${nextPractice}`}>Play another random timeline</a><a className="archive-button" href="/?archive=1">Past puzzles</a>{mode!=="daily"&&<a className="today-button" href="/">Today’s challenge</a>}{mode==="archive"&&<a className="replay-button" href={`/?puzzle=${puzzle}&replay=1`}>Replay #{puzzle}</a>}</div>{mode==="daily"&&<><div className="stats-grid"><div><strong>{Object.keys(history).length}</strong><span>Played</span></div><div><strong>{streakCount}</strong><span>Current streak</span></div><div><strong>{maxStreak}</strong><span>Best streak</span></div><div><strong>{Object.values(history).filter(x=>x.rounds.every(r=>r.correct)).length}</strong><span>Perfect days</span></div></div><div className="next-drop"><span>Next timeline in</span><strong>{formatCountdown(timer)}</strong></div></>}</section><section className="recap-card"><div className="recap-heading"><div><p className="eyebrow">Answer</p><h2>The full timeline</h2></div><span>{finalTimeline[0]?.answerYear}–{finalTimeline.at(-1)?.answerYear}</span></div><div className="recap-list">{finalTimeline.map(q=><article key={q.id} className="recap-row"><strong>{q.answerYear}</strong><div><span>{q.category}</span><p>{q.prompt}</p></div></article>)}</div></section></main>}
