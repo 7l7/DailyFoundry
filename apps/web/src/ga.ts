@@ -5,7 +5,8 @@ declare global {
   }
 }
 
-const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID?.trim();
+const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+const measurementId = viteEnv?.VITE_GA_MEASUREMENT_ID?.trim();
 
 if (measurementId) {
   window.dataLayer = window.dataLayer || [];
