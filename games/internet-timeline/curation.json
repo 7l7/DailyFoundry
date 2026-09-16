@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "defaultStatus": "core",
   "specialist": [
     "extra-1969-arpanet",
@@ -25,7 +25,11 @@
     "extra-2002-tor",
     "extra-2006-aws-s3",
     "extra-2006-spotify-founded",
-    "extra-2009-bitcoin-genesis"
+    "extra-2009-bitcoin-genesis",
+    "extra-2019-stadia",
+    "extra-2019-airpods-pro",
+    "extra-2022-dalle2",
+    "extra-2024-sora"
   ],
   "retire": [
     "web-1980",
