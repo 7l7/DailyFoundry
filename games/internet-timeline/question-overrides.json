@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "questions": {
     "web-1976": {"appeal":"mainstream","difficulty":"medium"},
     "web-1981": {"appeal":"known","difficulty":"medium"},
@@ -37,7 +37,7 @@
     "extra-2003-steam": {"appeal":"mainstream","explanation":"Steam dates to 2003, before YouTube, Reddit and the iPhone."},
     "extra-2004-gmail": {"appeal":"mainstream","explanation":"Gmail launched in 2004, before YouTube and two years before Twitter."},
     "extra-2004-firefox": {"appeal":"mainstream","explanation":"Firefox 1.0 arrived in 2004 — four years before Chrome entered the browser race."},
-    "extra-2005-reddit": {"appeal":"mainstream","explanation":"Reddit launched in 2005 — before Twitter, the first iPhone and Instagram."},
+    "extra-2005-reddit": {"appeal":"mainstream","explanation":"Reddit launched in 2005 — before Twitter, the first iPhone and Instagram.","sourceLabel":"Reddit","sourceUrl":"https://investor.redditinc.com/ir-resources/investor-faqs/default.aspx"},
     "extra-2005-google-maps": {"appeal":"mainstream","explanation":"Google Maps launched in 2005, before the smartphone era made maps feel inseparable from phones."},
     "extra-2007-kindle": {"appeal":"mainstream","explanation":"The first Kindle and the first iPhone both arrived in 2007."},
     "extra-2007-tumblr": {"appeal":"mainstream","explanation":"Tumblr launched in 2007 — before Instagram, Pinterest and Snapchat."},
@@ -45,7 +45,7 @@
     "extra-2008-app-store": {"appeal":"mainstream","explanation":"The App Store opened in 2008 — a year after the first iPhone itself launched."},
     "extra-2009-minecraft": {"appeal":"mainstream","explanation":"Minecraft’s first public version appeared in 2009 — before Instagram, Twitch and Snapchat.","sourceLabel":"Minecraft","sourceUrl":"https://www.minecraft.net/en-us/about-minecraft"},
     "extra-2010-ipad": {"appeal":"mainstream","explanation":"The first iPad arrived in 2010, the same year Instagram launched."},
-    "extra-2010-pinterest": {"appeal":"mainstream","explanation":"Pinterest dates to 2010 — before Twitch, Snapchat and Tinder."},
+    "extra-2010-pinterest": {"appeal":"mainstream","explanation":"Pinterest dates to 2010 — before Twitch, Snapchat and Tinder.","sourceLabel":"Pinterest","sourceUrl":"https://investor.pinterestinc.com/investor-overview/default.aspx"},
     "extra-2011-twitch": {"appeal":"mainstream","explanation":"Twitch launched in 2011 — four years before Discord.","sourceLabel":"Twitch","sourceUrl":"https://blog.twitch.tv/en/2022/03/30/breaking-the-monolith-at-twitch/"},
     "extra-2011-siri": {"appeal":"mainstream","explanation":"Siri reached the iPhone in 2011 — more than a decade before ChatGPT."},
     "extra-2012-google-drive": {"appeal":"mainstream","explanation":"Google Drive launched in 2012 — the same year Tinder launched and Gangnam Style hit one billion YouTube views."},
@@ -83,6 +83,7 @@
     "fun-2006-wii": {"appeal":"mainstream","explanation":"The Wii arrived in 2006 — a year before the first iPhone.","sourceLabel":"Nintendo","sourceUrl":"https://www.nintendo.com/en-gb/Hardware/Nintendo-History/Nintendo-History-625945.html"},
     "fun-2007-netflix-streaming": {"appeal":"mainstream","explanation":"Netflix began streaming in 2007 — the same year the first iPhone went on sale."},
     "fun-2008-spotify-launch": {"appeal":"mainstream","explanation":"Spotify launched in 2008 — after Netflix streaming, but before Instagram and Twitch."},
+    "fun-2009-facebook-like": {"sourceLabel":"Meta","sourceUrl":"https://about.fb.com/company-info/"},
     "fun-2011-google-plus": {"sourceLabel":"Google","sourceUrl":"https://blog.google/products-and-platforms/products/google-plus/1/"},
     "fun-2012-tinder": {"appeal":"mainstream","explanation":"Tinder launched in 2012 — before Vine, Slack and Discord."},
     "fun-2013-doge": {"appeal":"mainstream","explanation":"Doge broke out in 2013 — the same year Slack launched and two years before Discord."},
