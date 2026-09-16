@@ -51,6 +51,7 @@ function rolePenalty(q,role,p){const appeal=appealOf(q),difficulty=difficultyOf(
 function candidateScore(q,selected,dayIndex,slot,p,recentEntities){const tie=hashSeed(`${GAME_ID}:${SCHEDULE_VERSION}:${dayIndex}:${slot}:${q.id}:${p.key}`)/0xffffffff;const target=p.difficulty[slot]??'medium',role=SLOT_ROLES[slot]??'memory';const difficultyPenalty=difficultyOf(q)===target?0:220;const sameYearPenalty=selected.some(x=>x.answerYear===q.answerYear)?10000:0;const sameEntityPenalty=selected.some(x=>entityOf(x)===entityOf(q))?900:recentEntities.has(entityOf(q))?170:0;const eraCount=selected.filter(x=>eraBucket(x.answerYear)===eraBucket(q.answerYear)).length;const categoryCount=selected.filter(x=>x.category===q.category).length;const nicheCount=selected.filter(x=>appealOf(x)==='niche').length;const nichePenalty=appealOf(q)==='niche'&&nicheCount>=1?700:0;const minDist=selected.length?Math.min(...selected.map(x=>Math.abs(x.answerYear-q.answerYear))):50;const distanceTerm=p.close?Math.min(minDist,20)*1.8:-Math.min(minDist,20)*1.1;return sameYearPenalty+sameEntityPenalty+nichePenalty+profilePenalty(q,p)+rolePenalty(q,role,p)+difficultyPenalty+categoryCount*92+eraCount*24+distanceTerm+tie}
 function fixedDeck(index){const ids=FIXED_DECK_IDS[index];if(!ids)return null;const deck=ids.map(id=>byId.get(id)).filter(Boolean);return deck.length===CARDS_NEEDED?deck:null}
 function buildDeck(dayIndex,recentDays,profile){const blocked=new Set(recentDays.flat().map(q=>q.id));const recentEntities=new Set(recentDays.slice(-ENTITY_COOLDOWN_DAYS).flat().map(entityOf));const active=all.filter(q=>statusOf(q)!=='retire'&&(profile.key==='hard'||statusOf(q)==='core'));const available=active.filter(q=>!blocked.has(q.id));const pool=available.length>=CARDS_NEEDED?available:active;const selected=[];for(let slot=0;slot<CARDS_NEEDED;slot++){const unique=pool.filter(q=>!selected.some(x=>x.id===q.id||x.answerYear===q.answerYear));const remaining=(unique.length?unique:pool.filter(q=>!selected.some(x=>x.id===q.id))).sort((a,b)=>candidateScore(a,selected,dayIndex,slot,profile,recentEntities)-candidateScore(b,selected,dayIndex,slot,profile,recentEntities));if(!remaining[0])throw new Error('Not enough questions');selected.push(remaining[0])}return selected}
+function deckSummary(deck){return deck.map(q=>`${q.id}@${q.answerYear}[${appealOf(q)}/${difficultyOf(q)}]`).join(', ')}
 
 const problems=[];
 const scheduled=[];
@@ -73,19 +74,20 @@ for(let i=0;i<LEGACY_DAYS+60;i++){
   const retiredCount=deck.filter(q=>statusOf(q)==='retire').length;
   const specialistCount=deck.filter(q=>statusOf(q)==='specialist').length;
   const prior14=new Set(recent.flat().map(q=>q.id));
+  const summary=deckSummary(deck);
 
-  if(new Set(ids).size!==CARDS_NEEDED)problems.push(`#${n}: duplicate question in same deck`);
-  if(new Set(years).size!==CARDS_NEEDED)problems.push(`#${n}: same-year collision`);
-  if(ids.some(id=>prior14.has(id)))problems.push(`#${n}: repeats a question from previous 14 days`);
-  if(retiredCount)problems.push(`#${n}: contains retired question`);
-  if(p.key!=='hard'&&specialistCount)problems.push(`#${n}: normal Daily contains specialist question`);
-  if(p.key!=='hard'&&hard>1)problems.push(`#${n}: normal Daily has ${hard} hard cards`);
-  if(p.key==='hard'&&hard>2)problems.push(`#${n}: Hard Mode has ${hard} hard cards`);
-  if(p.key!=='hard'&&niche>1)problems.push(`#${n}: normal Daily has ${niche} niche cards`);
-  if(p.key!=='hard'&&mainstream<2)problems.push(`#${n}: only ${mainstream} mainstream cards`);
-  if(funCount<1)problems.push(`#${n}: no fun/relatable card`);
-  if(appealOf(deck[0])==='niche'||difficultyOf(deck[0])==='hard')problems.push(`#${n}: anchor is too hostile (${deck[0].id})`);
-  if(appealOf(deck[1])==='niche'||difficultyOf(deck[1])==='hard')problems.push(`#${n}: warmup is too hostile (${deck[1].id})`);
+  if(new Set(ids).size!==CARDS_NEEDED)problems.push(`#${n}: duplicate question in same deck :: ${summary}`);
+  if(new Set(years).size!==CARDS_NEEDED)problems.push(`#${n}: same-year collision :: ${summary}`);
+  if(ids.some(id=>prior14.has(id)))problems.push(`#${n}: repeats a question from previous 14 days :: ${summary}`);
+  if(retiredCount)problems.push(`#${n}: contains retired question :: ${summary}`);
+  if(p.key!=='hard'&&specialistCount)problems.push(`#${n}: normal Daily contains specialist question :: ${summary}`);
+  if(p.key!=='hard'&&hard>1)problems.push(`#${n}: normal Daily has ${hard} hard cards :: ${summary}`);
+  if(p.key==='hard'&&hard>2)problems.push(`#${n}: Hard Mode has ${hard} hard cards :: ${summary}`);
+  if(p.key!=='hard'&&niche>1)problems.push(`#${n}: normal Daily has ${niche} niche cards :: ${summary}`);
+  if(p.key!=='hard'&&mainstream<2)problems.push(`#${n}: only ${mainstream} mainstream cards :: ${summary}`);
+  if(funCount<1)problems.push(`#${n}: no fun/relatable card :: ${summary}`);
+  if(appealOf(deck[0])==='niche'||difficultyOf(deck[0])==='hard')problems.push(`#${n}: anchor is too hostile (${deck[0].id}) :: ${summary}`);
+  if(appealOf(deck[1])==='niche'||difficultyOf(deck[1])==='hard')problems.push(`#${n}: warmup is too hostile (${deck[1].id}) :: ${summary}`);
 }
 
 if(problems.length){
