@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "defaultStatus": "core",
   "specialist": [
     "extra-1969-arpanet",
@@ -39,18 +39,11 @@
     "fun-2017-hq-trivia"
   ],
   "sourceRepair": [
-    "fun-2006-wii",
     "fun-2009-facebook-like",
     "fun-2011-google-plus",
     "fun-2013-harlem-shake",
-    "fun-2021-sea-shanty",
     "extra-2005-reddit",
-    "extra-2009-minecraft",
-    "extra-2010-pinterest",
-    "extra-2011-twitch",
-    "extra-2014-amazon-echo",
-    "extra-2018-fortnite-mobile",
-    "extra-2020-zoom"
+    "extra-2010-pinterest"
   ],
   "notes": {
     "specialist": "Accurate or potentially useful, but ordinary players often lack a fair temporal reference. Keep for Hard/specialist use until data or better framing proves otherwise.",
