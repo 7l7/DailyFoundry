@@ -18,8 +18,6 @@ type AnalyticsWindow = Window & {
 const GAME_ID = "internet-timeline";
 const HISTORY_KEY = `dailyfoundry:${GAME_ID}:history:v2`;
 const analyticsWindow = window as AnalyticsWindow;
-const viteEnv = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-const measurementId = viteEnv?.VITE_GA_MEASUREMENT_ID?.trim() || "G-7X3HQ2PK49";
 const overrides = (questionOverrides as { questions?: Record<string, Partial<QuestionLite>> }).questions ?? {};
 const questionByPrompt = new Map<string, QuestionLite>(
   [...baseQuestions, ...extraQuestions, ...funQuestions].map((raw) => {
@@ -74,16 +72,6 @@ function enrichPayload(payload: VaPayload): VaPayload {
 
   return { ...payload, data };
 }
-
-analyticsWindow.dataLayer = analyticsWindow.dataLayer || [];
-analyticsWindow.gtag = (...args: unknown[]) => { analyticsWindow.dataLayer?.push(args); };
-analyticsWindow.gtag("js", new Date());
-analyticsWindow.gtag("config", measurementId, { send_page_view: true });
-
-const script = document.createElement("script");
-script.async = true;
-script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`;
-document.head.appendChild(script);
 
 function mirrorToGa(event: string, properties?: unknown) {
   if (event !== "event" || !properties || typeof properties !== "object") return;
