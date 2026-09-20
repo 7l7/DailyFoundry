@@ -1,17 +1,19 @@
 # Internet Timeline
 
-Internet Timeline is a free daily browser game about internet and digital culture history.
+Internet Timeline is a free daily browser game about internet history, web history and digital culture.
 
-Players place five historical events into chronological order. Topics include early networking, the World Wide Web, search, email, ecommerce, social media, mobile, gaming, streaming, cloud computing, cybersecurity, cryptocurrency and artificial intelligence.
+Players place five historical events into chronological order. The game covers early networking, the World Wide Web, search, email, ecommerce, social media, mobile computing, gaming, streaming, cloud computing, cybersecurity, cryptocurrency, internet culture and artificial intelligence.
 
 ## Canonical URL
 https://daily-foundry.vercel.app/
 
 ## Key pages
 - Home / daily game: https://daily-foundry.vercel.app/
+- Internet history timeline and sourced topic guide: https://daily-foundry.vercel.app/internet-history-timeline/
+- Daily history games and timeline-game format guide: https://daily-foundry.vercel.app/daily-history-games/
 - Puzzle archive: https://daily-foundry.vercel.app/archive/
 - How to play: https://daily-foundry.vercel.app/how-to-play/
-- About and sourcing methodology: https://daily-foundry.vercel.app/about/
+- About, sourcing and scheduling methodology: https://daily-foundry.vercel.app/about/
 - Open-source project: https://github.com/7l7/DailyFoundry
 
 ## Game facts
@@ -20,8 +22,13 @@ https://daily-foundry.vercel.app/
 - One deterministic daily puzzle is shared by all players.
 - Each puzzle contains one anchor event plus five placement rounds.
 - Past puzzles remain replayable in the archive.
+- Practice mode provides additional random timelines.
 - Daily scheduling avoids recent repeats and same-year collisions and mixes eras, categories and difficulty.
 - Question records include explanations and source URLs.
+- Primary and institutional sources are preferred when available.
+
+## Topic definition
+Internet Timeline is a daily history game and chronology puzzle focused specifically on the history of the internet, the World Wide Web, digital platforms and online culture.
 
 ## Publisher
 DailyFoundry
